@@ -171,8 +171,9 @@ def cmd_summary(args):
         a = Analysis(path, db)
         if len(args.files) > 1:
             print(f"== {path}")
-        print(f"{len(a.runs)} ciclo(s) de motor")
-        for i, r in enumerate(a.runs, 1):
+        runs = a.engine_runs()
+        print(f"{len(runs)} ciclo(s) de motor")
+        for i, r in enumerate(runs, 1):
             dur = (f"{r['x1'] - r['x0']:.1f} s" if a.x_kind == "time"
                    else f"{r['frames']} frames 0x17C (sem timestamp)")
             print(f"  #{i}: linhas {r['line0']}-{r['line1']}  {dur}\n"
@@ -185,7 +186,12 @@ def cmd_summary(args):
 
 def cmd_web(args):
     from .web import serve
-    serve(args.sources or [os.path.expanduser("~/claude/can*.log")], args.dbc, args.host, args.port)
+    sources = args.sources
+    if not sources and not (args.live or args.replay):
+        sources = [os.path.expanduser("~/claude/can*.log")]
+    serve(sources, args.dbc, args.host, args.port,
+          live_ifaces=args.live or (), replays=args.replay or (),
+          retention=args.retention, replay_rate=args.replay_rate)
     return 0
 
 
@@ -243,6 +249,13 @@ def build_parser():
     sp.add_argument("sources", nargs="*", help="logs, globs ou pastas (padrão: ~/claude/can*.log)")
     sp.add_argument("--host", default="127.0.0.1")
     sp.add_argument("--port", type=int, default=8090)
+    sp.add_argument("--live", action="append", metavar="IFACE",
+                    help="interface SocketCAN ao vivo, ex.: --live can0 (repetível)")
+    sp.add_argument("--replay", action="append", metavar="LOG",
+                    help="reemite um log em tempo real como fonte ao vivo (teste sem carro)")
+    sp.add_argument("--replay-rate", type=float, default=1000.0, help="frames/s do replay (padrão 1000)")
+    sp.add_argument("--retention", type=float, default=600.0,
+                    help="segundos guardados nas séries ao vivo (padrão 600)")
     sp.set_defaults(fn=cmd_web)
     return p
 

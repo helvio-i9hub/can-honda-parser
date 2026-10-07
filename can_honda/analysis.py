@@ -47,6 +47,12 @@ class SignalSeries:
         if len(self.distinct) <= DISTINCT_CAP:
             self.distinct.add(v)
 
+    def trim(self, cut: float):
+        i = bisect_left(self.x, cut)
+        if i:
+            del self.x[:i]
+            del self.v[:i]
+
     # ---- metadados / classificação
     @property
     def binary(self) -> bool:
@@ -149,74 +155,108 @@ def _cluster(points, gap):
 
 
 class Analysis:
-    def __init__(self, path: str, db: Optional[Database] = None):
+    """Estado incremental: ``feed(frame)`` frame a frame (arquivo ou ao vivo).
+
+    ``Analysis(path)`` lê o arquivo inteiro. Para ao vivo, ``Analysis(name=...,
+    retention=s)`` + ``feed`` + ``trim()`` periódico: as séries guardam só os
+    últimos ``retention`` segundos; mín/máx/mudanças valem desde o início.
+    """
+
+    def __init__(self, path: Optional[str] = None, db: Optional[Database] = None,
+                 name: Optional[str] = None, retention: Optional[float] = None):
         self.path = path
-        self.mtime = os.path.getmtime(path)
-        self.size = os.path.getsize(path)
+        self.name = name or (os.path.basename(path) if path else "?")
+        self.mtime = os.path.getmtime(path) if path else None
+        self.size = os.path.getsize(path) if path else None
         self.db = db or default_dbc()
+        self.retention = retention
         self.signals: Dict[str, SignalSeries] = {}
         self.frames = 0
         self.skipped = 0
-        self.x_kind = "line"
+        self.x_kind = None
         self.x0 = self.x1 = 0.0
-        self.ids: List[dict] = []
         self.runs: List[dict] = []
-        self._run()
+        self._dec = Decoder(self.db)
+        self._dlcs: Dict[int, set] = {}
+        self._run = None
+        self._temps = {}
+        self._jumps = []
+        if path:
+            reader = FrameReader(path)
+            for f in reader:
+                self.feed(f)
+            self.skipped = reader.skipped
 
-    def _run(self):
-        dec = Decoder(self.db)
-        reader = FrameReader(self.path)
-        dlcs: Dict[int, set] = {}
+    def feed(self, f):
+        if self.x_kind is None:
+            self.x_kind = "time" if f.ts is not None else "line"
+        x = f.ts if self.x_kind == "time" and f.ts is not None else float(f.line_no)
+        if self.frames == 0:
+            self.x0 = x
+        self.x1 = x
+        self.frames += 1
+        self._dlcs.setdefault(f.can_id, set()).add(f.dlc)
+        d = self._dec.decode(f)
+        if d.counter_ok is False:
+            self._jumps.append((x, f.line_no))
+        if d.message is None or d.checksum_ok is False:
+            return
+        mname = d.message.name
         sigs = self.signals
-        x_kind = None
-        run = None
-        temps = {}
-        jumps = []
-        for f in reader:
-            if x_kind is None:
-                x_kind = "time" if f.ts is not None else "line"
-            x = f.ts if x_kind == "time" and f.ts is not None else float(f.line_no)
-            if self.frames == 0:
-                self.x0 = x
-            self.x1 = x
-            self.frames += 1
-            dlcs.setdefault(f.can_id, set()).add(f.dlc)
-            d = dec.decode(f)
-            if d.counter_ok is False:
-                jumps.append((x, f.line_no))
-            if d.message is None or d.checksum_ok is False:
-                continue
-            mname = d.message.name
-            for name, v in d.values.items():
-                key = f"{mname}.{name}"
-                s = sigs.get(key)
-                if s is None:
-                    s = sigs[key] = SignalSeries(key, f.can_id, mname, d.message.signals[name])
-                s.add(x, v)
-            if mname == "ENGINE_STATUS":
-                temps = d.values
-            elif f.can_id == 0x17C:
-                run = self._track_run(run, x, f.line_no, d.values.get("ENGINE_RPM", 0), temps)
-        if run is not None:
-            self.runs.append(run)
-        self.skipped = reader.skipped
-        self.x_kind = x_kind or "line"
-        it = dec.integrity
+        for name, v in d.values.items():
+            key = f"{mname}.{name}"
+            s = sigs.get(key)
+            if s is None:
+                s = sigs[key] = SignalSeries(key, f.can_id, mname, d.message.signals[name])
+            s.add(x, v)
+        if mname == "ENGINE_STATUS":
+            self._temps = d.values
+        elif f.can_id == 0x17C:
+            self._run = self._track_run(self._run, x, f.line_no, d.values.get("ENGINE_RPM", 0), self._temps)
+
+    def trim(self):
+        """Descarta pontos mais velhos que ``retention`` (só ao vivo)."""
+        if not self.retention or not self.frames:
+            return
+        cut = self.x1 - self.retention
+        if cut <= self.x0:
+            return
+        for s in self.signals.values():
+            s.trim(cut)
+        self._jumps = [j for j in self._jumps if j[0] >= cut]
+        self.x0 = cut
+
+    @property
+    def ids(self) -> List[dict]:
         from .honda import NO_CHECKSUM
+        it = self._dec.integrity
+        out = []
         for cid in sorted(it.frames):
             msg = self.db.messages.get(cid)
             n = it.frames[cid]
-            self.ids.append({
+            out.append({
                 "id": f"{cid:03X}", "message": msg.name if msg else None,
                 "frames": n, "share": round(100 * n / self.frames, 2) if self.frames else 0,
-                "dlc": sorted(dlcs[cid]),
+                "dlc": sorted(self._dlcs[cid]),
                 "checksum_bad": None if cid in NO_CHECKSUM else it.bad_checksum.get(cid, 0),
                 "counter_jumps": it.counter_jumps.get(cid, 0),
             })
-        self.jump_clusters = _cluster(jumps, (self.x1 - self.x0) * 0.002)
-        for r in self.runs:
-            tail = sorted(r.pop("_rpm_tail"))
+        return out
+
+    @property
+    def jump_clusters(self) -> List[dict]:
+        return _cluster(self._jumps, (self.x1 - self.x0) * 0.002)
+
+    def engine_runs(self) -> List[dict]:
+        """Ciclos fechados + o ciclo em andamento (``open``)."""
+        runs = self.runs + ([dict(self._run, open=True)] if self._run else [])
+        out = []
+        for r in runs:
+            tail = sorted(r["_rpm_tail"])
+            r = {k: v for k, v in r.items() if k != "_rpm_tail"}
             r["idle_end"] = tail[len(tail) // 2] if tail else None
+            out.append(r)
+        return out
 
     def _track_run(self, run, x, line_no, rpm, temps):
         if rpm > 0:
@@ -224,6 +264,9 @@ class Analysis:
                 run = {"x0": x, "line0": line_no, "rpm_max": 0, "frames": 0,
                        "coolant0": temps.get("COOLANT_TEMP"), "intake0": temps.get("INTAKE_TEMP"),
                        "_rpm_tail": []}
+            if run["coolant0"] is None:     # 0x324 (10 Hz) pode chegar depois do 1º 0x17C
+                run["coolant0"] = temps.get("COOLANT_TEMP")
+                run["intake0"] = temps.get("INTAKE_TEMP")
             run["frames"] += 1
             run["rpm_max"] = max(run["rpm_max"], rpm)
             run["x1"], run["line1"] = x, line_no
@@ -241,16 +284,17 @@ class Analysis:
 
     # ---- JSON
     def overview(self) -> dict:
-        bad = sum(r["checksum_bad"] or 0 for r in self.ids)
-        checked = sum(r["frames"] for r in self.ids if r["checksum_bad"] is not None)
+        ids = self.ids
+        bad = sum(r["checksum_bad"] or 0 for r in ids)
+        checked = sum(r["frames"] for r in ids if r["checksum_bad"] is not None)
         return {
-            "file": os.path.basename(self.path), "size": self.size,
+            "file": self.name, "size": self.size,
             "frames": self.frames, "skipped": self.skipped,
-            "x_kind": self.x_kind, "x0": self.x0, "x1": self.x1,
+            "x_kind": self.x_kind or "line", "x0": self.x0, "x1": self.x1,
             "checksum_ok_pct": round(100 * (checked - bad) / checked, 3) if checked else None,
-            "counter_jumps": sum(r["counter_jumps"] for r in self.ids),
+            "counter_jumps": sum(r["counter_jumps"] for r in ids),
             "jump_clusters": self.jump_clusters,
-            "ids": self.ids, "runs": self.runs,
+            "ids": ids, "runs": self.engine_runs(),
             "signals": [s.meta() for s in sorted(self.signals.values(),
                                                  key=lambda s: (s.can_id, s.key))],
         }

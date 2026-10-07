@@ -15,6 +15,8 @@ não adicionar dependências (python-can, cantools).
   ciclos de motor, saltos de contador agrupados; reamostra (raw ou faixa mín/máx/média) por recorte
 - `can_honda/web.py` + `static/index.html` — dashboard (http.server, SVG à mão, sem CDN);
   só serve arquivos da lista (por nome), padrão `~/claude/can*.log`, porta 8090
+- `can_honda/live.py` — LiveSource (thread + lock + retenção) para `--live can0` (socketcan.py) e
+  `--replay log` (reemite em tempo real); Analysis é incremental (`feed`/`trim`) e serve aos dois
 
 ## Dados reais
 - `~/claude/can-sample-0.log` e `can-sample-1.log` — candump padrão, SEM timestamp, carro parado
@@ -22,6 +24,9 @@ não adicionar dependências (python-can, cantools).
 - scripts antigos de referência (não confiáveis): `~/Downloads/civic_can.py`, `python-can-decode-v1.py`
 
 ## Fatos dos logs
+- `can0` (gs_usb, 500k) existe nesta máquina quando o adaptador está no carro; sem sudo sem senha.
+  Captura com timestamp: `~/claude/can-live-20261007.log` (10 s, -L). Taxas: 100/50/25/10/5/3,3 Hz (README).
+- Para parar o servidor use o PID (`ss -ltnp 'sport = :8090'`); `pkill -f "can_honda web"` mata o próprio shell.
 - Saltos de contador só nos ciclos de ignição (sample-0 L~505600/~512700, sample-1 L~149600) =
   módulos reiniciando, não perda de captura. (Cuidado: no `stats` a coluna Hz vazia desloca campos no awk.)
 

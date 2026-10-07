@@ -79,6 +79,12 @@ button { cursor: pointer; }
 button:disabled { opacity: .45; cursor: default; }
 #status { color: var(--text-muted); margin-left: auto; }
 #zoominfo { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+#livebox { display: inline-flex; gap: 8px; align-items: center; }
+#livebox[hidden] { display: none; }
+.live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); margin-right: 6px; vertical-align: 1px; }
+.live-dot.on { background: #0ca30c; }
+.live-dot.err { background: var(--critical); }
+#status.err { color: var(--critical); }
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-top: 16px; }
 .tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
@@ -152,6 +158,17 @@ footer { color: var(--text-muted); font-size: 12px; max-width: 1280px; margin: 3
       </select>
     </label>
     <label>Sinal <input id="q" type="search" placeholder="RPM, TEMP, DOOR…" size="14"></label>
+    <span id="livebox" hidden>
+      <label>Janela
+        <select id="win">
+          <option value="30">30 s</option>
+          <option value="120" selected>2 min</option>
+          <option value="300">5 min</option>
+          <option value="600">10 min</option>
+        </select>
+      </label>
+      <button id="follow">Pausar</button>
+    </span>
     <button id="reset" disabled>Ver tudo</button>
     <span id="zoominfo"></span>
     <span id="status">carregando…</span>
@@ -185,7 +202,8 @@ footer { color: var(--text-muted); font-size: 12px; max-width: 1280px; margin: 3
 const $ = (s) => document.querySelector(s);
 const NS = "http://www.w3.org/2000/svg";
 const fmtInt = new Intl.NumberFormat("pt-BR");
-const S = { file: null, ov: null, chart: null, view: null, cursor: null, charts: [], req: 0 };
+const S = { file: null, ov: null, chart: null, view: null, cursor: null, charts: [], req: 0,
+            live: false, follow: true, timer: null, sigkeys: "" };
 
 function el(tag, attrs = {}, text) {
   const e = tag.startsWith("svg:") ? document.createElementNS(NS, tag.slice(4)) : document.createElement(tag);
@@ -207,8 +225,13 @@ function compact(v) {
   if (a >= 1e4) return (v / 1e3).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "k";
   return fmtNum(Math.round(v * 100) / 100);
 }
+function clock(x, ms) {
+  const d = new Date(x * 1000);
+  return d.toLocaleTimeString("pt-BR", { hour12: false }) + (ms ? "," + String(d.getMilliseconds()).padStart(3, "0") : "");
+}
 function fmtX(x) {
   if (!S.ov) return "";
+  if (S.live) return clock(x, true);
   return S.ov.x_kind === "time" ? (x - S.ov.x0).toFixed(2) + " s" : "linha " + fmtInt.format(Math.round(x));
 }
 function valueLabel(meta, v) {
@@ -247,7 +270,9 @@ function renderTiles() {
   const rpm = o.signals.find((m) => m.key === "POWERTRAIN_DATA.ENGINE_RPM");
   const ect = o.signals.find((m) => m.key === "ENGINE_STATUS.COOLANT_TEMP");
   box.append(
-    tile("Frames", compact(o.frames), (o.x_kind === "time" ? "com timestamp" : "sem timestamp — eixo = nº da linha"), true),
+    tile("Frames", compact(o.frames), o.live
+      ? `ao vivo · ${fmtNum(o.live.fps)} frames/s · gráficos retêm ${fmtNum(o.live.retention)} s`
+      : (o.x_kind === "time" ? "com timestamp" : "sem timestamp — eixo = nº da linha"), true),
     tile("IDs definidos", `${defined} de ${o.ids.length}`, "no DBC do Civic 2014"),
     tile("Checksum Honda", o.checksum_ok_pct === null ? "—" : fmtNum(o.checksum_ok_pct) + "%", "dos frames com checksum"),
     tile("Saltos de contador", fmtInt.format(o.counter_jumps),
@@ -285,7 +310,8 @@ function renderRuns() {
   const o = S.ov;
   table("#runs", [
     { h: "#", f: (r) => String(o.runs.indexOf(r) + 1) },
-    { h: "Linhas", f: (r) => `${fmtInt.format(r.line0)} – ${fmtInt.format(r.line1)}`, cls: () => "nowrap" },
+    { h: S.live ? "Início" : "Linhas", cls: () => "nowrap",
+      f: (r) => S.live ? clock(r.x0) + (r.open ? " · em andamento" : "") : `${fmtInt.format(r.line0)} – ${fmtInt.format(r.line1)}` },
     { h: o.x_kind === "time" ? "Duração" : "Frames 0x17C", num: true,
       f: (r) => o.x_kind === "time" ? (r.x1 - r.x0).toFixed(1) + " s" : fmtInt.format(r.frames) },
     { h: "RPM máx", num: true, f: (r) => fmtNum(r.rpm_max) },
@@ -323,7 +349,8 @@ function renderIds() {
   ], S.ov.ids);
   table("#jumps", [
     { h: "#", f: (j) => String(S.ov.jump_clusters.indexOf(j) + 1) },
-    { h: "Linhas", f: (j) => `${fmtInt.format(j.line0)} – ${fmtInt.format(j.line1)}`, cls: () => "nowrap" },
+    { h: S.live ? "Quando" : "Linhas", cls: () => "nowrap",
+      f: (j) => S.live ? clock(j.x0) : `${fmtInt.format(j.line0)} – ${fmtInt.format(j.line1)}` },
     { h: "Saltos", num: true, f: (j) => fmtInt.format(j.count) },
     { h: "", f: (j) => { const b = el("button", {}, "zoom"); const pad = Math.max(500, (j.x1 - j.x0) * 2);
         b.onclick = () => zoomTo(j.x0 - pad, j.x1 + pad); return b; } },
@@ -372,7 +399,7 @@ function drawXAxis(svg, w, h, left, sx) {
     if (t < S.view.x0 || t > S.view.x1) continue;
     const x = sx.px(t);
     svg.append(el("svg:text", { x, y: h - 6, "text-anchor": "middle" },
-      S.ov.x_kind === "time" ? (t - S.ov.x0).toFixed(0) + "s" : compact(t)));
+      S.live ? clock(t) : S.ov.x_kind === "time" ? (t - S.ov.x0).toFixed(0) + "s" : compact(t)));
   }
 }
 function drawJumps(svg, top, bottom, sx) {
@@ -530,7 +557,7 @@ function attachPointer(c) {
       zoomTo(x0, x1);
     }
   });
-  c.svg.addEventListener("dblclick", () => zoomTo(S.ov.x0, S.ov.x1));
+  c.svg.addEventListener("dblclick", () => S.live ? setFollow(true) : zoomTo(S.ov.x0, S.ov.x1));
 }
 function setCursor(x, src, ev) {
   S.cursor = x;
@@ -588,11 +615,17 @@ function setCursor(x, src, ev) {
 
 async function zoomTo(x0, x1) {
   if (!S.ov) return;
+  if (S.live) setFollow(false);
   x0 = Math.max(S.ov.x0, x0); x1 = Math.min(S.ov.x1, x1);
   if (x1 - x0 < 2) return;
   await loadChart(x0, x1);
 }
 function renderZoomInfo() {
+  if (S.live) {
+    $("#reset").disabled = S.follow;
+    $("#zoominfo").textContent = S.follow ? "" : `pausado: ${fmtX(S.view.x0)} → ${fmtX(S.view.x1)}`;
+    return;
+  }
   const full = S.view.x0 <= S.ov.x0 && S.view.x1 >= S.ov.x1;
   $("#reset").disabled = full;
   $("#zoominfo").textContent = full ? "" : `${fmtX(S.view.x0)} → ${fmtX(S.view.x1)}`;
@@ -613,9 +646,9 @@ function buildCharts() {
 function drawAll() { for (const c of S.charts) (c.kind === "line" ? drawLine : drawLanes)(c); }
 
 // ---------------------------------------------------------------- carga
-async function loadChart(x0, x1) {
+async function loadChart(x0, x1, quiet) {
   const id = ++S.req;
-  $("#charts").classList.add("loading");
+  if (!quiet) $("#charts").classList.add("loading");
   const bins = Math.max(200, Math.min(1600, Math.round(($("#charts").clientWidth || 800) / 1.5)));
   let url = `/api/chart?file=${encodeURIComponent(S.file)}&bins=${bins}`;
   if (x0 !== undefined) url += `&x0=${x0}&x1=${x1}`;
@@ -624,32 +657,86 @@ async function loadChart(x0, x1) {
     if (id !== S.req) return;
     S.chart = data;
     S.view = { x0: data.x0, x1: data.x1 };
-    if (!S.charts.length) buildCharts(); else drawAll();
+    const keys = Object.keys(data.series).sort().join("|");
+    if (!S.charts.length || keys !== S.sigkeys) { S.sigkeys = keys; buildCharts(); } else drawAll();
     renderZoomInfo();
   } catch (e) {
-    $("#status").textContent = "erro: " + e.message;
+    setStatus("erro: " + e.message, "err");
   } finally {
     if (id === S.req) $("#charts").classList.remove("loading");
   }
 }
+function setStatus(text, cls) {
+  const st = $("#status");
+  st.replaceChildren();
+  st.className = cls === "err" ? "err" : "";
+  if (cls) st.append(el("span", { class: "live-dot " + cls }));
+  st.append(document.createTextNode(text));
+}
+function setFollow(on) {
+  S.follow = on;
+  $("#follow").textContent = on ? "Pausar" : "Seguir ao vivo";
+  if (on) livePoll();
+  else if (S.chart) renderZoomInfo();
+}
+function liveStatus(info) {
+  if (!info) return;
+  if (info.status === "recebendo") setStatus(`${info.name} · recebendo · ${fmtNum(info.fps)} frames/s`, "on");
+  else if (info.status === "erro") setStatus(`${info.name} · ${info.error} — tentando de novo`, "err");
+  else if (info.status === "sem frames") setStatus(`${info.name} · sem frames há ${fmtNum(info.last_frame_age)} s (barramento quieto?)`, "idle");
+  else setStatus(`${info.name} · ${info.status}`, "idle");
+}
+async function livePoll() {
+  clearTimeout(S.timer);
+  if (!S.live) return;
+  const name = S.file;
+  try {
+    const ov = await getJSON(`/api/overview?file=${encodeURIComponent(name)}`);
+    if (name !== S.file) return;
+    S.ov = ov;
+    liveStatus(ov.live);
+    renderTiles(); renderRuns(); renderIds();
+    if (!S.tick || S.tick++ % 3 === 0) renderSignalTable();
+    if (ov.frames) {
+      if (S.follow) {
+        const win = +$("#win").value;
+        await loadChart(Math.max(ov.x0, ov.x1 - win), ov.x1, true);
+      } else if (!S.chart) {
+        await loadChart(undefined, undefined, true);
+      }
+    }
+  } catch (e) {
+    setStatus("erro: " + e.message, "err");
+  }
+  if (S.live && name === S.file) S.timer = setTimeout(livePoll, 1000);
+}
 async function loadFile(name) {
-  S.file = name; S.charts = []; S.ov = null;
+  clearTimeout(S.timer);
+  S.file = name; S.charts = []; S.ov = null; S.chart = null; S.sigkeys = ""; S.tick = 1;
+  $("#charts").replaceChildren();
   const f = S.files.find((x) => x.name === name);
-  $("#status").textContent = f && !f.loaded
-    ? `analisando ${name} (${(f.size / 1e6).toFixed(1)} MB)… a primeira vez leva alguns segundos`
-    : `carregando ${name}…`;
+  S.live = !!(f && f.live);
+  $("#livebox").hidden = !S.live;
   try { localStorage.setItem("can-honda-file", name); } catch (e) {}
+  if (S.live) {
+    $("#foot").textContent = `${name}: fonte ao vivo · eixo X = hora local · arraste para pausar e dar zoom, duplo clique volta a seguir`;
+    setFollow(true);
+    return;
+  }
+  setStatus(f && !f.loaded
+    ? `analisando ${name} (${(f.size / 1e6).toFixed(1)} MB)… a primeira vez leva alguns segundos`
+    : `carregando ${name}…`);
   try {
     S.ov = await getJSON(`/api/overview?file=${encodeURIComponent(name)}`);
     if (f) f.loaded = true;
     renderTiles(); renderRuns(); renderSignalTable(); renderIds();
     await loadChart();
-    $("#status").textContent = `${S.ov.file} · ${S.ov.signals.length} sinais decodificados`;
+    setStatus(`${S.ov.file} · ${S.ov.signals.length} sinais decodificados`);
     $("#foot").textContent = `${S.ov.file}: ${fmtInt.format(S.ov.frames)} frames` +
       (S.ov.skipped ? `, ${fmtInt.format(S.ov.skipped)} linhas ignoradas` : "") +
       ` · eixo X = ${S.ov.x_kind === "time" ? "tempo (s)" : "nº da linha no arquivo"} · checksum ruim não entra nas séries`;
   } catch (e) {
-    $("#status").textContent = "erro: " + e.message;
+    setStatus("erro: " + e.message, "err");
   }
 }
 function refilter() {
@@ -662,7 +749,8 @@ function refilter() {
 async function init() {
   S.files = await getJSON("/api/files");
   const sel = $("#file");
-  for (const f of S.files) sel.append(el("option", { value: f.name }, `${f.name} (${(f.size / 1e6).toFixed(1)} MB)`));
+  for (const f of S.files) sel.append(el("option", { value: f.name },
+    f.live ? `● ${f.name} — ao vivo` : `${f.name} (${(f.size / 1e6).toFixed(1)} MB)`));
   let pick = null;
   try { pick = localStorage.getItem("can-honda-file"); } catch (e) {}
   if (!S.files.some((f) => f.name === pick)) pick = S.files.length ? S.files[0].name : null;
@@ -670,7 +758,9 @@ async function init() {
   sel.onchange = () => loadFile(sel.value);
   $("#conf").onchange = refilter;
   let t; $("#q").oninput = () => { clearTimeout(t); t = setTimeout(refilter, 200); };
-  $("#reset").onclick = () => zoomTo(S.ov.x0, S.ov.x1);
+  $("#reset").onclick = () => S.live ? setFollow(true) : zoomTo(S.ov.x0, S.ov.x1);
+  $("#follow").onclick = () => setFollow(!S.follow);
+  $("#win").onchange = () => S.live && setFollow(true);
   let rt, lastW = 0;
   new ResizeObserver(([e]) => {
     const w = Math.round(e.contentRect.width);
@@ -679,7 +769,7 @@ async function init() {
   }).observe($("#charts"));
   if (pick) loadFile(pick); else $("#status").textContent = "nenhum log";
 }
-init().catch((e) => { $("#status").textContent = "erro: " + e.message; });
+init().catch((e) => setStatus("erro: " + e.message, "err"));
 </script>
 </body>
 </html>
