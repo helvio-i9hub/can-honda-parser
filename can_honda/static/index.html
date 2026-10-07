@@ -681,9 +681,12 @@ function setFollow(on) {
 }
 function liveStatus(info) {
   if (!info) return;
-  if (info.status === "recebendo") setStatus(`${info.name} · recebendo · ${fmtNum(info.fps)} frames/s`, "on");
+  const tag = info.iface === "virtual" ? " (vcan, virtual)" : info.iface === "physical" ? " (adaptador)" : "";
+  if (info.status === "recebendo") setStatus(`${info.name}${tag} · recebendo · ${fmtNum(info.fps)} frames/s`, "on");
   else if (info.status === "erro") setStatus(`${info.name} · ${info.error} — tentando de novo`, "err");
-  else if (info.status === "sem frames") setStatus(`${info.name} · sem frames há ${fmtNum(info.last_frame_age)} s (barramento quieto?)`, "idle");
+  else if (info.status === "sem frames") setStatus(info.last_frame_age === null
+      ? `${info.name}${tag} · aberta, aguardando o primeiro frame` + (info.iface === "virtual" ? " (alimente com: python3 -m can_honda play LOG --iface " + info.name + ")" : "")
+      : `${info.name}${tag} · sem frames há ${fmtNum(info.last_frame_age)} s (barramento quieto?)`, "idle");
   else setStatus(`${info.name} · ${info.status}`, "idle");
 }
 async function livePoll() {
@@ -750,7 +753,7 @@ async function init() {
   S.files = await getJSON("/api/files");
   const sel = $("#file");
   for (const f of S.files) sel.append(el("option", { value: f.name },
-    f.live ? `● ${f.name} — ao vivo` : `${f.name} (${(f.size / 1e6).toFixed(1)} MB)`));
+    f.live ? `● ${f.name} — ao vivo${f.iface === "virtual" ? " (vcan)" : ""}` : `${f.name} (${(f.size / 1e6).toFixed(1)} MB)`));
   let pick = null;
   try { pick = localStorage.getItem("can-honda-file"); } catch (e) {}
   if (!S.files.some((f) => f.name === pick)) pick = S.files.length ? S.files[0].name : null;

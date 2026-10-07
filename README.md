@@ -56,6 +56,34 @@ python3 -m can_honda web --replay ~/claude/can-sample-1.log   # simula ao vivo s
   mín/máx/mudanças, integridade e ciclos de motor valem desde o início
 - leitura SocketCAN com o módulo `socket` da stdlib (sem python-can); não transmite nada
 
+### Entrada por interface virtual (vcan0)
+
+Para alimentar o `live`/`web` sem o carro, ou para outro programa publicar
+frames que o dashboard lê:
+
+```bash
+sudo modprobe vcan
+sudo ip link add dev vcan0 type vcan && sudo ip link set vcan0 up
+
+python3 -m can_honda web --vcan                          # dashboard lendo a vcan0 (= --live vcan0)
+python3 -m can_honda play ~/claude/can-sample-1.log      # injeta o log na vcan0 a 1000 frames/s
+python3 -m can_honda play captura-L.log --speed 2        # log com timestamp: ritmo original × 2
+python3 -m can_honda play a.log --loop -1                # repete até Ctrl-C
+python3 -m can_honda live vcan0 --signal ENGINE_RPM      # decodifica no terminal
+```
+
+`play` aceita todos os formatos de entrada (inclusive os can-sample sem
+timestamp, que o `canplayer` não lê) e **só transmite para interface
+virtual**: recusa interfaces físicas (`can0` com adaptador), para nunca
+injetar frames no barramento do carro. O dashboard mostra se cada fonte
+é `vcan, virtual` ou `adaptador`.
+
+### Gravar uma captura
+
+```bash
+tools/capture-can.sh can0 3600 ~/claude    # espera a can0 subir, grava candump -L, até 1 h
+```
+
 Só os arquivos passados (ou os `*.log`/`*.csv` das pastas) ficam acessíveis.
 O primeiro carregamento de um log de 43 MB leva ~6 s; depois fica em cache
 (invalidado pelo mtime).

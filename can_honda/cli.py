@@ -8,11 +8,13 @@ Comandos:
   summary  ciclos de motor (RPM > 0): duração, RPM, temperaturas, combustível
   web      dashboard no navegador (sinais, gráficos, integridade, ciclos de motor)
   signals  lista os sinais do DBC com unidade e confiança
-  live     igual ao decode, mas lendo de uma interface SocketCAN
+  live     igual ao decode, mas lendo de uma interface SocketCAN (can0, vcan0…)
+  play     injeta um log numa interface virtual (vcan0) — entrada para live/web sem o carro
 """
 
 import argparse
 import csv
+import itertools
 import os
 import sys
 from collections import defaultdict
@@ -113,6 +115,27 @@ def cmd_live(args):
         return 0
 
 
+def cmd_play(args):
+    from .socketcan import play
+    total = 0
+    try:
+        rounds = itertools.count() if args.loop < 0 else range(max(1, args.loop))
+        for n in rounds:
+            for path in args.files:
+                total += play(FrameReader(path), args.iface, args.rate, args.speed)
+            print(f"# volta {n + 1}: {total} frames enviados para {args.iface}", file=sys.stderr)
+    except KeyboardInterrupt:
+        pass
+    except (OSError, PermissionError) as e:
+        print(f"erro: {e}", file=sys.stderr)
+        if "não existe" in str(e):
+            print("crie a vcan:  sudo modprobe vcan && sudo ip link add dev "
+                  f"{args.iface} type vcan && sudo ip link set {args.iface} up", file=sys.stderr)
+        return 2
+    print(f"{total} frames enviados para {args.iface}", file=sys.stderr)
+    return 0
+
+
 # ---------------------------------------------------------------- csv
 def cmd_csv(args):
     db = load_dbc(args.dbc)
@@ -187,10 +210,10 @@ def cmd_summary(args):
 def cmd_web(args):
     from .web import serve
     sources = args.sources
-    if not sources and not (args.live or args.replay):
+    if not sources and not (args.live or args.replay or args.vcan):
         sources = [os.path.expanduser("~/claude/can*.log")]
     serve(sources, args.dbc, args.host, args.port,
-          live_ifaces=args.live or (), replays=args.replay or (),
+          live_ifaces=(args.live or []) + (["vcan0"] if args.vcan else []), replays=args.replay or (),
           retention=args.retention, replay_rate=args.replay_rate)
     return 0
 
@@ -236,6 +259,14 @@ def build_parser():
     sp = sub.add_parser("decode"); files(sp); decode_opts(sp); sp.set_defaults(fn=cmd_decode)
     sp = sub.add_parser("live"); sp.add_argument("iface", nargs="?", default="can0")
     decode_opts(sp); sp.set_defaults(fn=cmd_live)
+    sp = sub.add_parser("play", help="injeta log em vcan")
+    sp.add_argument("files", nargs="+", help="logs candump / SavvyCAN CSV")
+    sp.add_argument("--iface", default="vcan0", help="interface virtual de destino (padrão vcan0)")
+    sp.add_argument("--rate", type=float, default=1000.0,
+                    help="frames/s para logs sem timestamp (padrão 1000 ≈ F-CAN do Civic; 0 = máximo)")
+    sp.add_argument("--speed", type=float, default=1.0, help="fator de velocidade para logs com timestamp")
+    sp.add_argument("--loop", type=int, default=1, help="repetições (padrão 1; -1 = infinito)")
+    sp.set_defaults(fn=cmd_play)
     sp = sub.add_parser("csv"); files(sp); filters(sp)
     sp.add_argument("-o", "--output")
     sp.add_argument("--ref", type=_hexid, default=0x17C, help="ID que dispara cada linha (padrão 17C)")
@@ -251,6 +282,8 @@ def build_parser():
     sp.add_argument("--port", type=int, default=8090)
     sp.add_argument("--live", action="append", metavar="IFACE",
                     help="interface SocketCAN ao vivo, ex.: --live can0 (repetível)")
+    sp.add_argument("--vcan", action="store_true",
+                    help="atalho para --live vcan0 (interface virtual; alimente com 'play')")
     sp.add_argument("--replay", action="append", metavar="LOG",
                     help="reemite um log em tempo real como fonte ao vivo (teste sem carro)")
     sp.add_argument("--replay-rate", type=float, default=1000.0, help="frames/s do replay (padrão 1000)")

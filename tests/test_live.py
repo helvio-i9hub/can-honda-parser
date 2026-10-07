@@ -79,3 +79,38 @@ class TestLiveSource(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPlaySafety(unittest.TestCase):
+    def test_refuses_physical_and_missing(self):
+        from unittest import mock
+        from can_honda import socketcan
+        with mock.patch.object(socketcan, "interface_kind", return_value="physical"):
+            with self.assertRaises(PermissionError):
+                socketcan.play([], "can0")
+        with mock.patch.object(socketcan, "interface_kind", return_value=None):
+            with self.assertRaises(OSError):
+                socketcan.play([], "nada0")
+
+    @unittest.skipUnless(os.path.isdir("/sys/class/net/vcan0"), "sem vcan0")
+    def test_vcan0_roundtrip(self):
+        """O que play envia chega inteiro e em ordem (tolera tráfego alheio intercalado)."""
+        import threading
+        from can_honda import socketcan
+        frames = list(read_frames(os.path.join(FIX, "brake.log")))
+        mine = [(f.can_id, f.data) for f in frames]
+        state = {"i": 0}
+
+        def reader():
+            for f in socketcan.live_frames("vcan0"):
+                if state["i"] < len(mine) and (f.can_id, f.data) == mine[state["i"]]:
+                    state["i"] += 1
+                if state["i"] == len(mine):
+                    return
+
+        t = threading.Thread(target=reader, daemon=True)
+        t.start()
+        time.sleep(0.2)
+        self.assertEqual(socketcan.play(frames, "vcan0", rate=5000), len(frames))
+        t.join(3)
+        self.assertEqual(state["i"], len(mine))

@@ -54,6 +54,7 @@ class LiveSource:
         self._factory = frames_factory
         self._stop = threading.Event()
         self._count = 0
+        self._since = time.time()
         self._thread = threading.Thread(target=self._loop, name=f"live-{name}", daemon=True)
 
     def start(self):
@@ -67,6 +68,7 @@ class LiveSource:
         while not self._stop.is_set():
             try:
                 self.status = "conectando"
+                self._since = time.time()
                 last_trim = last_rate = time.time()
                 rate_n = 0
                 for f in self._factory():
@@ -97,7 +99,14 @@ class LiveSource:
         if status == "recebendo" and age is not None and age > 2:
             status = "sem frames"          # interface de pé, barramento quieto (carro desligado?)
             self.fps = 0.0
-        return {"name": self.name, "kind": self.kind, "status": status, "error": self.error,
+        elif status == "conectando" and self.error is None and time.time() - self._since > 1:
+            status = "sem frames"          # aberta, mas nenhum frame ainda
+        iface = None
+        if self.kind == "socketcan":
+            from .socketcan import interface_kind
+            iface = interface_kind(self.name)          # virtual / physical / None (ausente)
+        return {"name": self.name, "kind": self.kind, "iface": iface,
+                "status": status, "error": self.error,
                 "fps": round(self.fps, 1), "last_frame_age": None if age is None else round(age, 1),
                 "retention": self.retention, "uptime": round(time.time() - self.started, 1)}
 

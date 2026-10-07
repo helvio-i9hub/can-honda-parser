@@ -17,6 +17,9 @@ não adicionar dependências (python-can, cantools).
   só serve arquivos da lista (por nome), padrão `~/claude/can*.log`, porta 8090
 - `can_honda/live.py` — LiveSource (thread + lock + retenção) para `--live can0` (socketcan.py) e
   `--replay log` (reemite em tempo real); Analysis é incremental (`feed`/`trim`) e serve aos dois
+- `socketcan.py` — `live_frames` (leitura) e `play` (injeção) só com `socket`; `play` RECUSA interface
+  física (`interface_kind`: sem link `device` no sysfs = virtual). `web --vcan` = `--live vcan0`
+- `tools/capture-can.sh` — gravador candump -L que espera a interface e segmenta se ela cair
 
 ## Dados reais
 - `~/claude/can-sample-0.log` e `can-sample-1.log` — candump padrão, SEM timestamp, carro parado
@@ -25,6 +28,8 @@ não adicionar dependências (python-can, cantools).
 
 ## Fatos dos logs
 - `can0` (gs_usb, 500k) existe nesta máquina quando o adaptador está no carro; sem sudo sem senha.
+  ATENÇÃO: o usuário às vezes cria uma **vcan chamada can0** — checar `ip -details link show can0`
+  (gs_usb tem `ECHO`/bitrate; vcan diz `vcan`) antes de tratar dados como do carro.
   Captura com timestamp: `~/claude/can-live-20261007.log` (10 s, -L). Taxas: 100/50/25/10/5/3,3 Hz (README).
 - Para parar o servidor use o PID (`ss -ltnp 'sport = :8090'`); `pkill -f "can_honda web"` mata o próprio shell.
 - Saltos de contador só nos ciclos de ignição (sample-0 L~505600/~512700, sample-1 L~149600) =
