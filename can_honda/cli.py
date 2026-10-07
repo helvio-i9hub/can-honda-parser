@@ -1,0 +1,265 @@
+"""Linha de comando: ``python3 -m can_honda <comando> ...``
+
+Comandos:
+  stats    IDs do log: frames, DLC, checksum/contador Honda, se há definição no DBC
+  decode   sinais decodificados (por padrão, só quando o valor muda)
+  csv      snapshot do estado do barramento em CSV (um registro a cada N frames de um ID)
+  bytes    análise por byte de um ID (valores distintos, nº de mudanças) — para descobrir sinais
+  summary  ciclos de motor (RPM > 0): duração, RPM, temperaturas, combustível
+  signals  lista os sinais do DBC com unidade e confiança
+  live     igual ao decode, mas lendo de uma interface SocketCAN
+"""
+
+import argparse
+import csv
+import sys
+from collections import defaultdict
+
+from .dbc import DEFAULT_DBC, load_dbc
+from .decoder import BusState, Decoder
+from .frames import FrameReader
+from .honda import NO_CHECKSUM
+
+
+def _hexid(s: str) -> int:
+    return int(s, 16)
+
+
+def _frames(paths, dec=None):
+    for p in paths:
+        if dec is not None:
+            dec.integrity.new_file()
+        reader = FrameReader(p)
+        yield from reader
+        if reader.skipped:
+            print(f"# {p}: {reader.skipped} linha(s) ignorada(s)", file=sys.stderr)
+
+
+def _wanted(args):
+    ids = set(args.id or [])
+    sigs = {s.upper() for s in (args.signal or [])}
+    return ids, sigs
+
+
+# ---------------------------------------------------------------- stats
+def cmd_stats(args):
+    dec = Decoder(load_dbc(args.dbc))
+    dlcs = defaultdict(set)
+    first_ts, last_ts = {}, {}
+    total = 0
+    for f in _frames(args.files, dec):
+        total += 1
+        dec.integrity.feed(f.can_id, f.data)
+        dlcs[f.can_id].add(f.dlc)
+        if f.ts is not None:
+            first_ts.setdefault(f.can_id, f.ts)
+            last_ts[f.can_id] = f.ts
+    it = dec.integrity
+    print(f"{total} frames, {len(it.frames)} IDs")
+    print(f"{'ID':>4} {'frames':>8} {'%':>6} {'Hz':>7} DLC  {'cksum':>11} {'cont.salto':>10}  mensagem")
+    for cid in sorted(it.frames):
+        n = it.frames[cid]
+        hz = ""
+        if cid in first_ts and last_ts[cid] > first_ts[cid]:
+            hz = f"{(n - 1) / (last_ts[cid] - first_ts[cid]):7.1f}"
+        bad = it.bad_checksum.get(cid, 0)
+        ck = "n/a" if cid in NO_CHECKSUM else f"{n - bad}/{n}"
+        msg = dec.db.messages.get(cid)
+        print(f"{cid:4X} {n:8d} {100 * n / total:6.2f} {hz:>7} "
+              f"{','.join(map(str, sorted(dlcs[cid]))):>3}  {ck:>11} "
+              f"{it.counter_jumps.get(cid, 0):10d}  {msg.name if msg else '-'}")
+    return 0
+
+
+# ---------------------------------------------------------------- decode/live
+def _print_decoded(frames, args):
+    dec = Decoder(load_dbc(args.dbc), protocol=args.protocol)
+    state = BusState()
+    ids, sigs = _wanted(args)
+    for f in frames:
+        if ids and f.can_id not in ids:
+            continue
+        d = dec.decode(f)
+        if d.message is None and not args.unknown:
+            continue
+        where = f"{f.ts:.6f}" if f.ts is not None else f"L{f.line_no}"
+        flag = "" if d.checksum_ok is not False else "  !CHECKSUM"
+        if args.all or d.message is None:
+            if sigs:
+                d.values = {k: v for k, v in d.values.items() if k.upper() in sigs}
+                if not d.values:
+                    continue
+            print(f"{where:>12} {f.can_id:03X} {d.name:<18} {d.text()}{flag}")
+            continue
+        for key, (old, new) in state.update(d).items():
+            if sigs and key.split(".", 1)[1].upper() not in sigs:
+                continue
+            unit = d.message.signals[key.split(".", 1)[1]].unit
+            print(f"{where:>12} {f.can_id:03X} {key:<40} {old} -> {new}{' ' + unit if unit else ''}")
+    return 0
+
+
+def cmd_decode(args):
+    return _print_decoded(_frames(args.files), args)
+
+
+def cmd_live(args):
+    from .socketcan import live_frames
+    try:
+        return _print_decoded(live_frames(args.iface), args)
+    except KeyboardInterrupt:
+        return 0
+
+
+# ---------------------------------------------------------------- csv
+def cmd_csv(args):
+    db = load_dbc(args.dbc)
+    dec = Decoder(db)
+    state = BusState()
+    _, sigs = _wanted(args)
+    cols = [f"{m.name}.{s}" for m in sorted(db.messages.values(), key=lambda m: m.can_id)
+            for s in m.signals if s not in ("COUNTER", "CHECKSUM")
+            and (not sigs or s.upper() in sigs)]
+    out = open(args.output, "w", newline="") if args.output else sys.stdout
+    w = csv.writer(out)
+    w.writerow(["line", "ts"] + cols)
+    seen = 0
+    for f in _frames(args.files):
+        state.update(dec.decode(f))
+        if f.can_id == args.ref:
+            seen += 1
+            if seen % args.every == 0:
+                w.writerow([f.line_no, "" if f.ts is None else f"{f.ts:.6f}"]
+                           + [state.values.get(c, "") for c in cols])
+    if out is not sys.stdout:
+        out.close()
+    return 0
+
+
+# ---------------------------------------------------------------- bytes
+def cmd_bytes(args):
+    vals = defaultdict(lambda: defaultdict(set))
+    changes = defaultdict(lambda: defaultdict(int))
+    last, count = {}, defaultdict(int)
+    for f in _frames(args.files):
+        if args.id and f.can_id not in args.id:
+            continue
+        count[f.can_id] += 1
+        prev = last.get(f.can_id)
+        for i, b in enumerate(f.data):
+            vals[f.can_id][i].add(b)
+            if prev is not None and i < len(prev) and prev[i] != b:
+                changes[f.can_id][i] += 1
+        last[f.can_id] = f.data
+    for cid in sorted(count):
+        print(f"\nID {cid:03X}  frames={count[cid]}")
+        for i in sorted(vals[cid]):
+            v = vals[cid][i]
+            shown = " ".join(f"{x:02X}" for x in sorted(v)) if len(v) <= 12 \
+                else f"min={min(v):02X} max={max(v):02X}"
+            print(f"  b{i}  distintos={len(v):3d}  mudancas={changes[cid][i]:8d}  {shown}")
+    return 0
+
+
+# ---------------------------------------------------------------- summary
+def cmd_summary(args):
+    dec = Decoder(load_dbc(args.dbc))
+    state = BusState()
+    runs, cur = [], None
+    for f in _frames(args.files):
+        d = dec.decode(f)
+        state.update(d)
+        if f.can_id != 0x17C or d.checksum_ok is False:
+            continue
+        rpm = d.values.get("ENGINE_RPM", 0)
+        sv = state.values
+        if rpm > 0 and cur is None:
+            cur = {"start": f.line_no, "t0": f.ts, "n": 0, "rpm_max": 0, "rpm": [],
+                   "ect0": sv.get("ENGINE_STATUS.COOLANT_TEMP"),
+                   "iat0": sv.get("ENGINE_STATUS.INTAKE_TEMP")}
+        if cur is not None and rpm > 0:
+            cur["n"] += 1
+            cur["rpm_max"] = max(cur["rpm_max"], rpm)
+            cur["rpm"].append(rpm)
+            cur["end"], cur["t1"] = f.line_no, f.ts
+            cur["ect1"] = sv.get("ENGINE_STATUS.COOLANT_TEMP")
+            cur["iat1"] = sv.get("ENGINE_STATUS.INTAKE_TEMP")
+            cur["fuel"] = sv.get("ENGINE_STATUS.TRIP_FUEL_CONSUMED")
+        elif cur is not None:
+            runs.append(cur)
+            cur = None
+    if cur is not None:
+        runs.append(cur)
+    print(f"{len(runs)} ciclo(s) de motor")
+    for i, r in enumerate(runs, 1):
+        tail = sorted(r["rpm"][-max(1, len(r["rpm"]) // 10):])
+        idle = tail[len(tail) // 2]
+        dur = (f"{r['t1'] - r['t0']:.1f} s" if r["t0"] is not None
+               else f"{r['n']} frames 0x17C (sem timestamp)")
+        print(f"  #{i}: linhas {r['start']}-{r['end']}  {dur}\n"
+              f"      RPM max {r['rpm_max']}  marcha lenta final ~{idle}\n"
+              f"      liquido arref. {r['ect0']} -> {r['ect1']} C   "
+              f"ar admissao {r['iat0']} -> {r['iat1']} C   "
+              f"TRIP_FUEL_CONSUMED {r['fuel']}")
+    return 0
+
+
+# ---------------------------------------------------------------- signals
+def cmd_signals(args):
+    db = load_dbc(args.dbc)
+    for m in sorted(db.messages.values(), key=lambda m: m.can_id):
+        print(f"{m.can_id:03X} {m.name} [{m.dlc}]" + (f"  — {m.comment}" if m.comment else ""))
+        for s in m.signals.values():
+            if s.name in ("COUNTER", "CHECKSUM"):
+                continue
+            print(f"     {s.name:<26} {s.start:>2}|{s.length:<2} {s.unit:<4} "
+                  f"{s.confidence or '-':<11} {_strip_conf(s.comment)}")
+    return 0
+
+
+def _strip_conf(c: str) -> str:
+    return c.split("]", 1)[1].strip() if c.startswith("[") else c
+
+
+# ---------------------------------------------------------------- main
+def build_parser():
+    p = argparse.ArgumentParser(prog="can_honda", description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--dbc", default=DEFAULT_DBC, help="arquivo DBC (padrão: Civic 2014)")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    def files(sp):
+        sp.add_argument("files", nargs="+", help="logs candump / SavvyCAN CSV")
+
+    def filters(sp):
+        sp.add_argument("--id", type=_hexid, action="append", help="filtra ID hex (repetível)")
+        sp.add_argument("--signal", action="append", help="filtra sinal por nome (repetível)")
+
+    def decode_opts(sp):
+        filters(sp)
+        sp.add_argument("--all", action="store_true", help="todo frame, não só mudanças")
+        sp.add_argument("--unknown", action="store_true", help="mostra IDs sem definição (hex)")
+        sp.add_argument("--protocol", action="store_true", help="inclui COUNTER/CHECKSUM")
+
+    sp = sub.add_parser("stats"); files(sp); sp.set_defaults(fn=cmd_stats)
+    sp = sub.add_parser("decode"); files(sp); decode_opts(sp); sp.set_defaults(fn=cmd_decode)
+    sp = sub.add_parser("live"); sp.add_argument("iface", nargs="?", default="can0")
+    decode_opts(sp); sp.set_defaults(fn=cmd_live)
+    sp = sub.add_parser("csv"); files(sp); filters(sp)
+    sp.add_argument("-o", "--output")
+    sp.add_argument("--ref", type=_hexid, default=0x17C, help="ID que dispara cada linha (padrão 17C)")
+    sp.add_argument("--every", type=int, default=10, help="uma linha a cada N frames do --ref")
+    sp.set_defaults(fn=cmd_csv)
+    sp = sub.add_parser("bytes"); files(sp)
+    sp.add_argument("--id", type=_hexid, action="append"); sp.set_defaults(fn=cmd_bytes)
+    sp = sub.add_parser("summary"); files(sp); sp.set_defaults(fn=cmd_summary)
+    sp = sub.add_parser("signals"); sp.set_defaults(fn=cmd_signals)
+    return p
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    try:
+        return args.fn(args)
+    except BrokenPipeError:
+        return 0

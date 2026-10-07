@@ -1,0 +1,166 @@
+VERSION ""
+
+NS_ :
+
+BS_:
+
+BU_: PCM VSA SCM BODY EPS
+
+CM_ "Honda Civic 2014 (9a geracao), F-CAN 500 kbit/s, IDs de 11 bits.
+Mapeamento construido sobre os logs reais can-sample-0.log / can-sample-1.log.
+Prefixo de confianca no comentario de cada sinal:
+  [CONFIRMADO] comportamento verificado nos logs (curva, correlacao, eco em outro ID)
+  [OPENDBC]    layout do opendbc (honda_*), coerente com os logs mas nao exercitado
+  [HIPOTESE]   palpite; use so como pista
+Todo frame com checksum Honda tem COUNTER (bits 5:4) e CHECKSUM (bits 3:0) no ultimo byte.";
+
+BO_ 316 GAS_PEDAL_2: 8 PCM
+ SG_ ENGINE_TORQUE_ESTIMATE : 7|16@0- (1,0) [-1000|1000] "Nm" EPS
+ SG_ ENGINE_TORQUE_REQUEST : 23|16@0- (1,0) [-1000|1000] "Nm" EPS
+ SG_ CAR_GAS : 39|8@0+ (1,0) [0|255] "" EPS
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EPS
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EPS
+
+BO_ 344 ENGINE_DATA: 8 PCM
+ SG_ XMISSION_SPEED : 7|16@0+ (0.01,0) [0|250] "kph" EPS
+ SG_ XMISSION_SPEED2 : 39|16@0+ (0.01,0) [0|250] "kph" EPS
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EPS
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EPS
+
+BO_ 380 POWERTRAIN_DATA: 8 PCM
+ SG_ PEDAL_GAS : 7|8@0+ (1,0) [0|255] "" EPS
+ SG_ ENGINE_RPM : 23|16@0+ (1,0) [0|15000] "rpm" EPS
+ SG_ GAS_PRESSED : 39|1@0+ (1,0) [0|1] "" EPS
+ SG_ BRAKE_SWITCH : 32|1@0+ (1,0) [0|1] "" EPS
+ SG_ BRAKE_PRESSED : 53|1@0+ (1,0) [0|1] "" EPS
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EPS
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EPS
+
+BO_ 420 VSA_STATUS: 8 VSA
+ SG_ USER_BRAKE : 7|16@0+ (0.015625,-1.609375) [0|1000] "" EPS
+ SG_ COMPUTER_BRAKING : 23|1@0+ (1,0) [0|1] "" EPS
+ SG_ FLAGS_B3 : 31|2@0+ (1,0) [0|3] "" EPS
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EPS
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EPS
+
+BO_ 422 SCM_BUTTONS: 8 SCM
+ SG_ CRUISE_BUTTONS : 7|3@0+ (1,0) [0|7] "" EPS
+ SG_ CRUISE_SETTING : 3|2@0+ (1,0) [0|3] "" EPS
+ SG_ LIGHTS_SETTING : 1|2@0+ (1,0) [0|3] "" EPS
+ SG_ MAIN_ON : 47|1@0+ (1,0) [0|1] "" EPS
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EPS
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EPS
+
+BO_ 432 STANDSTILL: 7 VSA
+ SG_ WHEELS_MOVING : 12|1@0+ (1,0) [0|1] "" EPS
+ SG_ BRAKE_ERROR_1 : 11|1@0+ (1,0) [0|1] "" EPS
+ SG_ BRAKE_ERROR_2 : 9|1@0+ (1,0) [0|1] "" EPS
+ SG_ COUNTER : 53|2@0+ (1,0) [0|3] "" EPS
+ SG_ CHECKSUM : 51|4@0+ (1,0) [0|15] "" EPS
+
+BO_ 464 WHEEL_SPEEDS: 8 VSA
+ SG_ WHEEL_SPEED_FL : 7|15@0+ (0.01,0) [0|250] "kph" EPS
+ SG_ WHEEL_SPEED_FR : 8|15@0+ (0.01,0) [0|250] "kph" EPS
+ SG_ WHEEL_SPEED_RL : 25|15@0+ (0.01,0) [0|250] "kph" EPS
+ SG_ WHEEL_SPEED_RR : 42|15@0+ (0.01,0) [0|250] "kph" EPS
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EPS
+
+BO_ 476 POWERTRAIN_RPM: 4 PCM
+ SG_ ENGINE_RPM : 15|16@0+ (1,0) [0|15000] "rpm" EPS
+ SG_ COUNTER : 29|2@0+ (1,0) [0|3] "" EPS
+ SG_ CHECKSUM : 27|4@0+ (1,0) [0|15] "" EPS
+
+BO_ 597 ROUGH_WHEEL_SPEED: 8 VSA
+ SG_ WHEEL_SPEED_FL : 7|8@0+ (1,0) [0|255] "" EPS
+ SG_ WHEEL_SPEED_FR : 15|8@0+ (1,0) [0|255] "" EPS
+ SG_ WHEEL_SPEED_RL : 23|8@0+ (1,0) [0|255] "" EPS
+ SG_ WHEEL_SPEED_RR : 31|8@0+ (1,0) [0|255] "" EPS
+ SG_ SET_TO_X55 : 39|8@0+ (1,0) [0|255] "" EPS
+ SG_ SET_TO_X55_2 : 47|8@0+ (1,0) [0|255] "" EPS
+ SG_ LONG_COUNTER : 55|8@0+ (1,0) [0|255] "" EPS
+
+BO_ 660 SCM_FEEDBACK: 8 SCM
+ SG_ LEFT_BLINKER : 5|1@0+ (1,0) [0|1] "" EPS
+ SG_ RIGHT_BLINKER : 6|1@0+ (1,0) [0|1] "" EPS
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EPS
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EPS
+
+BO_ 773 SEATBELT_STATUS: 7 BODY
+ SG_ SEATBELT_DRIVER_LAMP : 7|1@0+ (1,0) [0|1] "" EPS
+ SG_ SEATBELT_DRIVER_LATCHED : 10|1@0+ (1,0) [0|1] "" EPS
+ SG_ COUNTER : 53|2@0+ (1,0) [0|3] "" EPS
+ SG_ CHECKSUM : 51|4@0+ (1,0) [0|15] "" EPS
+
+BO_ 777 CAR_SPEED: 8 PCM
+ SG_ CAR_SPEED : 7|16@0+ (0.01,0) [0|250] "kph" EPS
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EPS
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EPS
+
+BO_ 804 ENGINE_STATUS: 8 PCM
+ SG_ COOLANT_TEMP : 7|8@0+ (1,-40) [-40|215] "C" EPS
+ SG_ INTAKE_TEMP : 15|8@0+ (1,-40) [-40|215] "C" EPS
+ SG_ TRIP_FUEL_CONSUMED : 23|16@0+ (1,0) [0|65535] "" EPS
+ SG_ ENGINE_OFF_FLAGS : 55|8@0+ (1,0) [0|255] "" EPS
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EPS
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EPS
+
+BO_ 1029 DOORS_STATUS: 8 BODY
+ SG_ DOOR_OPEN_FL : 37|1@0+ (1,0) [0|1] "" EPS
+ SG_ DOOR_OPEN_FR : 38|1@0+ (1,0) [0|1] "" EPS
+ SG_ DOOR_OPEN_RL : 39|1@0+ (1,0) [0|1] "" EPS
+ SG_ DOOR_OPEN_RR : 40|1@0+ (1,0) [0|1] "" EPS
+ SG_ TRUNK_OPEN : 41|1@0+ (1,0) [0|1] "" EPS
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EPS
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EPS
+
+CM_ BO_ 597 "Sem checksum Honda no ultimo byte (so 6/28595 frames batem por acaso).";
+CM_ BO_ 464 "COUNTER fica sempre 0 nos logs; bits 7:4 do ultimo byte sao o fim de WHEEL_SPEED_RR.";
+CM_ SG_ 316 ENGINE_TORQUE_ESTIMATE "[HIPOTESE] layout do GAS_PEDAL_2 do opendbc (la em 0x130); -105 com motor desligado.";
+CM_ SG_ 316 ENGINE_TORQUE_REQUEST "[HIPOTESE] idem; ~170-440 com motor em marcha lenta.";
+CM_ SG_ 316 CAR_GAS "[CONFIRMADO] acompanha POWERTRAIN_DATA.PEDAL_GAS (0..0x79 nos logs).";
+CM_ SG_ 344 XMISSION_SPEED "[OPENDBC] carro parado nos logs (sempre 0).";
+CM_ SG_ 344 XMISSION_SPEED2 "[OPENDBC] carro parado nos logs (sempre 0).";
+CM_ SG_ 380 PEDAL_GAS "[CONFIRMADO] varia 0..0x7F com acelerador; ecoa em 0x13C byte 4.";
+CM_ SG_ 380 ENGINE_RPM "[CONFIRMADO] identico a 0x1DC; marcha lenta fria ~1300 -> quente ~770.";
+CM_ SG_ 380 GAS_PRESSED "[OPENDBC] alterna junto com pisadas no acelerador.";
+CM_ SG_ 380 BRAKE_SWITCH "[OPENDBC] alterna nos logs (byte4 bit0).";
+CM_ SG_ 380 BRAKE_PRESSED "[CONFIRMADO] byte6 0x20 alterna em pisadas de freio.";
+CM_ SG_ 420 USER_BRAKE "[OPENDBC] sempre 0 nos logs.";
+CM_ SG_ 420 COMPUTER_BRAKING "[OPENDBC] sempre 0 nos logs.";
+CM_ SG_ 420 FLAGS_B3 "[HIPOTESE] byte3 00/C0 alterna poucas vezes; significado desconhecido.";
+CM_ SG_ 422 CRUISE_BUTTONS "[OPENDBC] 0x25/0x24 aparecem em can-sample-1 (=1, MAIN).";
+CM_ SG_ 422 CRUISE_SETTING "[OPENDBC]";
+CM_ SG_ 422 LIGHTS_SETTING "[OPENDBC] bits 1:0 de byte0 alternam 0/1/2/3 nos logs (alavanca de farol).";
+CM_ SG_ 422 MAIN_ON "[OPENDBC]";
+CM_ SG_ 432 WHEELS_MOVING "[OPENDBC] sempre 0 (parado).";
+CM_ SG_ 432 BRAKE_ERROR_1 "[OPENDBC]";
+CM_ SG_ 432 BRAKE_ERROR_2 "[OPENDBC]";
+CM_ SG_ 464 WHEEL_SPEED_FL "[OPENDBC] sempre 0 (parado).";
+CM_ SG_ 464 WHEEL_SPEED_FR "[OPENDBC] sempre 0 (parado).";
+CM_ SG_ 464 WHEEL_SPEED_RL "[OPENDBC] sempre 0 (parado).";
+CM_ SG_ 464 WHEEL_SPEED_RR "[OPENDBC] sempre 0 (parado).";
+CM_ SG_ 476 ENGINE_RPM "[CONFIRMADO] identico a POWERTRAIN_DATA.ENGINE_RPM.";
+CM_ SG_ 597 WHEEL_SPEED_FL "[OPENDBC] 00/FA nos logs (parado).";
+CM_ SG_ 597 WHEEL_SPEED_FR "[OPENDBC] 00/FA nos logs (parado).";
+CM_ SG_ 597 WHEEL_SPEED_RL "[OPENDBC] 00/FA nos logs (parado).";
+CM_ SG_ 597 WHEEL_SPEED_RR "[OPENDBC] 00/FA nos logs (parado).";
+CM_ SG_ 597 SET_TO_X55 "[CONFIRMADO] sempre 0x55.";
+CM_ SG_ 597 SET_TO_X55_2 "[CONFIRMADO] sempre 0x55.";
+CM_ SG_ 597 LONG_COUNTER "[CONFIRMADO] percorre 00..FF.";
+CM_ SG_ 660 LEFT_BLINKER "[CONFIRMADO] byte0 0x20 alterna (pisca); lado segundo o opendbc.";
+CM_ SG_ 660 RIGHT_BLINKER "[CONFIRMADO] byte0 0x40 alterna (pisca); lado segundo o opendbc.";
+CM_ SG_ 773 SEATBELT_DRIVER_LAMP "[OPENDBC] constante 0x80 0x14 nos logs.";
+CM_ SG_ 773 SEATBELT_DRIVER_LATCHED "[OPENDBC] constante nos logs.";
+CM_ SG_ 777 CAR_SPEED "[OPENDBC] sempre 0 (parado).";
+CM_ SG_ 804 COOLANT_TEMP "[CONFIRMADO] sobe 23->65 C em marcha lenta e cai lentamente apos desligar.";
+CM_ SG_ 804 INTAKE_TEMP "[CONFIRMADO] ~26 C rodando; sobe 33->41 C apos desligar (heat soak).";
+CM_ SG_ 804 TRIP_FUEL_CONSUMED "[CONFIRMADO] cresce monotono com motor ligado e zera ao desligar; unidade desconhecida.";
+CM_ SG_ 804 ENGINE_OFF_FLAGS "[HIPOTESE] 0x0E (14) com motor desligado, 0 ligado.";
+CM_ SG_ 1029 DOOR_OPEN_FL "[OPENDBC] fixo em 1 nos logs (porta do motorista aberta durante a captura?).";
+CM_ SG_ 1029 DOOR_OPEN_FR "[OPENDBC] alterna em can-sample-1.";
+CM_ SG_ 1029 DOOR_OPEN_RL "[OPENDBC] alterna em can-sample-1.";
+CM_ SG_ 1029 DOOR_OPEN_RR "[OPENDBC] alterna em can-sample-1.";
+CM_ SG_ 1029 TRUNK_OPEN "[OPENDBC]";
+
+VAL_ 422 CRUISE_BUTTONS 7 "TBD" 6 "TBD" 5 "TBD" 4 "ACCEL_RES" 3 "DECEL_SET" 2 "CANCEL" 1 "MAIN" 0 "NONE" ;
+VAL_ 422 LIGHTS_SETTING 3 "HIGH_BEAM" 2 "LOW_BEAM" 1 "POSITION" 0 "NONE" ;
