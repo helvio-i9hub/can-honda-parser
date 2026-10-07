@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAN Honda Dashboard</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6;
+  --series-1-wash: rgba(42,120,214,0.10);
+  --run-wash: rgba(11,11,11,0.045);
+  --brush: rgba(42,120,214,0.14);
+  --critical: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5;
+    --series-1-wash: rgba(57,135,229,0.12);
+    --run-wash: rgba(255,255,255,0.05);
+    --brush: rgba(57,135,229,0.20);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5;
+  --series-1-wash: rgba(57,135,229,0.12);
+  --run-wash: rgba(255,255,255,0.05);
+  --brush: rgba(57,135,229,0.20);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header, main { max-width: 1280px; margin: 0 auto; padding: 0 16px; }
+header { padding-top: 20px; }
+h1 { font-size: 20px; font-weight: 600; margin: 0; }
+.sub { color: var(--text-secondary); margin: 2px 0 0; }
+h2 { font-size: 15px; font-weight: 600; margin: 28px 0 10px; }
+h2 .hint { font-weight: 400; color: var(--text-muted); font-size: 13px; margin-left: 8px; }
+
+.filters {
+  display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+  margin: 16px 0 4px; padding: 10px 12px; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.filters label { color: var(--text-secondary); display: inline-flex; gap: 6px; align-items: center; }
+select, input[type=search], button {
+  font: inherit; color: var(--text-primary); background: var(--page);
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
+}
+button { cursor: pointer; }
+button:disabled { opacity: .45; cursor: default; }
+#status { color: var(--text-muted); margin-left: auto; }
+#zoominfo { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-top: 16px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.tile .label { color: var(--text-secondary); font-size: 13px; }
+.tile .value { font-size: 24px; font-weight: 600; margin-top: 2px; }
+.tile .note { color: var(--text-muted); font-size: 12px; }
+.tile.hero .value { font-size: 48px; line-height: 1.05; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px 6px; min-width: 0; }
+.card.wide { grid-column: 1 / -1; }
+.card-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.card-head .name { font-weight: 600; }
+.card-head .msg { color: var(--text-muted); font-size: 12px; }
+.card-head .readout { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text-secondary); white-space: nowrap; }
+.card-head .readout b { color: var(--text-primary); font-weight: 600; }
+.card .comment { color: var(--text-muted); font-size: 12px; margin: 0 0 2px; }
+svg.chart { display: block; width: 100%; touch-action: none; user-select: none; cursor: crosshair; }
+svg.chart text { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+svg.chart .lane-label { fill: var(--text-secondary); font-size: 12px; }
+.loading svg.chart { opacity: .45; transition: opacity .15s; }
+
+.badge {
+  font-size: 11px; padding: 0 6px; border-radius: 999px; line-height: 18px;
+  border: 1px solid var(--axis); color: var(--text-secondary); white-space: nowrap;
+}
+.badge.CONFIRMADO { background: var(--text-primary); color: var(--surface-1); border-color: var(--text-primary); }
+.badge.HIPOTESE { border-style: dashed; }
+
+table { width: 100%; border-collapse: collapse; background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--text-secondary); font-weight: 600; font-size: 12px; background: var(--page); position: sticky; top: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.muted { color: var(--text-muted); }
+td.nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: 0; }
+.tablewrap { overflow-x: auto; border-radius: 8px; }
+.bad { color: var(--critical); font-weight: 600; }
+.bad::before { content: "⚠ "; }
+
+#tip {
+  position: fixed; pointer-events: none; z-index: 10; display: none;
+  background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 10px; box-shadow: 0 4px 16px rgba(0,0,0,.12); font-size: 13px;
+}
+#tip .v { font-weight: 600; font-size: 15px; }
+#tip .k { color: var(--text-secondary); display: flex; gap: 6px; align-items: center; }
+#tip .k i { display: inline-block; width: 12px; height: 2px; background: var(--series-1); }
+#tip .w { color: var(--text-muted); font-size: 12px; }
+.empty { color: var(--text-muted); padding: 24px; text-align: center; }
+footer { color: var(--text-muted); font-size: 12px; max-width: 1280px; margin: 32px auto 24px; padding: 0 16px; }
+@media (max-width: 520px) {
+  .cards { grid-template-columns: 1fr; }
+  .tile.hero .value { font-size: 36px; }
+  #status { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>CAN Honda — Civic 2014</h1>
+  <p class="sub">Sinais identificados no F-CAN, valores medidos e integridade do barramento</p>
+  <div class="filters" role="toolbar">
+    <label>Log <select id="file"></select></label>
+    <label>Confiança
+      <select id="conf">
+        <option value="">todas</option>
+        <option value="CONFIRMADO">só confirmados</option>
+        <option value="CONFIRMADO,OPENDBC">confirmados + opendbc</option>
+        <option value="HIPOTESE">só hipóteses</option>
+      </select>
+    </label>
+    <label>Sinal <input id="q" type="search" placeholder="RPM, TEMP, DOOR…" size="14"></label>
+    <button id="reset" disabled>Ver tudo</button>
+    <span id="zoominfo"></span>
+    <span id="status">carregando…</span>
+  </div>
+</header>
+
+<main>
+  <div class="tiles" id="tiles"></div>
+
+  <h2>Ciclos de motor <span class="hint">RPM &gt; 0 em 0x17C — sombreados nos gráficos</span></h2>
+  <div class="tablewrap"><table id="runs"></table></div>
+
+  <h2>Medições <span class="hint">arraste num gráfico para dar zoom · duplo clique volta · faixa clara = mín/máx do trecho</span></h2>
+  <div class="cards" id="charts"></div>
+
+  <h2>Todos os sinais <span class="hint">inclui os constantes (sem gráfico)</span></h2>
+  <div class="tablewrap"><table id="signals"></table></div>
+
+  <h2>Integridade por ID <span class="hint">checksum e contador Honda</span></h2>
+  <div class="tablewrap"><table id="ids"></table></div>
+
+  <h2>Saltos de contador <span class="hint">tracejado vermelho nos gráficos · agrupados quando próximos</span></h2>
+  <p class="sub">Saltos concentrados num ponto, em vários IDs ao mesmo tempo, costumam ser módulos reiniciando (liga/desliga da ignição), não perda de captura.</p>
+  <div class="tablewrap"><table id="jumps"></table></div>
+</main>
+<footer id="foot"></footer>
+<div id="tip" role="tooltip"></div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const NS = "http://www.w3.org/2000/svg";
+const fmtInt = new Intl.NumberFormat("pt-BR");
+const S = { file: null, ov: null, chart: null, view: null, cursor: null, charts: [], req: 0 };
+
+function el(tag, attrs = {}, text) {
+  const e = tag.startsWith("svg:") ? document.createElementNS(NS, tag.slice(4)) : document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.setAttribute("class", v); else e.setAttribute(k, v);
+  }
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function fmtNum(v) {
+  if (v === null || v === undefined || v === "") return "—";
+  if (typeof v !== "number") return String(v);
+  if (Number.isInteger(v)) return fmtInt.format(v);
+  return v.toLocaleString("pt-BR", { maximumFractionDigits: Math.abs(v) < 10 ? 3 : 2 });
+}
+function compact(v) {
+  const a = Math.abs(v);
+  if (a >= 1e6) return (v / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 2 }) + "M";
+  if (a >= 1e4) return (v / 1e3).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "k";
+  return fmtNum(Math.round(v * 100) / 100);
+}
+function fmtX(x) {
+  if (!S.ov) return "";
+  return S.ov.x_kind === "time" ? (x - S.ov.x0).toFixed(2) + " s" : "linha " + fmtInt.format(Math.round(x));
+}
+function valueLabel(meta, v) {
+  if (v === null || v === undefined) return "—";
+  const c = meta.choices && meta.choices[String(v)];
+  const base = fmtNum(v) + (meta.unit ? " " + meta.unit : "");
+  return c ? `${c} (${fmtNum(v)})` : base;
+}
+async function getJSON(url) {
+  const r = await fetch(url);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+
+// ---------------------------------------------------------------- filtros
+function visibleMeta() {
+  const conf = $("#conf").value ? $("#conf").value.split(",") : null;
+  const q = $("#q").value.trim().toUpperCase();
+  return S.ov.signals.filter((m) =>
+    (!conf || conf.includes(m.confidence)) &&
+    (!q || m.key.toUpperCase().includes(q) || m.id.includes(q)));
+}
+
+// ---------------------------------------------------------------- tiles / tabelas
+function tile(label, value, note, hero) {
+  const t = el("div", { class: "tile" + (hero ? " hero" : "") });
+  t.append(el("div", { class: "label" }, label), el("div", { class: "value" }, value));
+  if (note) t.append(el("div", { class: "note" }, note));
+  return t;
+}
+function renderTiles() {
+  const o = S.ov, box = $("#tiles");
+  box.replaceChildren();
+  const defined = o.ids.filter((r) => r.message).length;
+  const rpm = o.signals.find((m) => m.key === "POWERTRAIN_DATA.ENGINE_RPM");
+  const ect = o.signals.find((m) => m.key === "ENGINE_STATUS.COOLANT_TEMP");
+  box.append(
+    tile("Frames", compact(o.frames), (o.x_kind === "time" ? "com timestamp" : "sem timestamp — eixo = nº da linha"), true),
+    tile("IDs definidos", `${defined} de ${o.ids.length}`, "no DBC do Civic 2014"),
+    tile("Checksum Honda", o.checksum_ok_pct === null ? "—" : fmtNum(o.checksum_ok_pct) + "%", "dos frames com checksum"),
+    tile("Saltos de contador", fmtInt.format(o.counter_jumps),
+      o.counter_jumps ? `em ${o.jump_clusters.length} ponto(s) — marcados nos gráficos` : "nenhum"),
+    tile("Ciclos de motor", String(o.runs.length), rpm ? `RPM máx ${fmtNum(rpm.max)}` : ""),
+    tile("Líquido de arrefecimento", ect ? `${fmtNum(ect.min)}–${fmtNum(ect.max)} °C` : "—", ect ? `último ${fmtNum(ect.last)} °C` : ""),
+  );
+}
+function table(id, cols, rows) {
+  const t = $(id);
+  t.replaceChildren();
+  const tr = el("tr");
+  for (const c of cols) tr.append(el("th", c.num ? { class: "num" } : {}, c.h));
+  const thead = el("thead"); thead.append(tr);
+  const tbody = el("tbody");
+  for (const r of rows) {
+    const row = el("tr");
+    for (const c of cols) {
+      const v = c.f(r);
+      const td = el("td", { class: (c.num ? "num " : "") + (c.cls ? c.cls(r) : "") });
+      if (v instanceof Node) td.append(v); else td.textContent = v;
+      row.append(td);
+    }
+    tbody.append(row);
+  }
+  if (!rows.length) {
+    const row = el("tr"), td = el("td", { colspan: cols.length, class: "muted" }, "nada com esse filtro");
+    row.append(td); tbody.append(row);
+  }
+  t.append(thead, tbody);
+}
+function badge(conf) { return el("span", { class: "badge " + conf }, (conf || "—").toLowerCase()); }
+
+function renderRuns() {
+  const o = S.ov;
+  table("#runs", [
+    { h: "#", f: (r) => String(o.runs.indexOf(r) + 1) },
+    { h: "Linhas", f: (r) => `${fmtInt.format(r.line0)} – ${fmtInt.format(r.line1)}`, cls: () => "nowrap" },
+    { h: o.x_kind === "time" ? "Duração" : "Frames 0x17C", num: true,
+      f: (r) => o.x_kind === "time" ? (r.x1 - r.x0).toFixed(1) + " s" : fmtInt.format(r.frames) },
+    { h: "RPM máx", num: true, f: (r) => fmtNum(r.rpm_max) },
+    { h: "Marcha lenta final", num: true, f: (r) => "~" + fmtNum(r.idle_end) + " rpm" },
+    { h: "Arrefecimento", num: true, f: (r) => `${fmtNum(r.coolant0)} → ${fmtNum(r.coolant1)} °C` },
+    { h: "Ar de admissão", num: true, f: (r) => `${fmtNum(r.intake0)} → ${fmtNum(r.intake1)} °C` },
+    { h: "TRIP_FUEL_CONSUMED", num: true, f: (r) => fmtNum(r.fuel) },
+    { h: "", f: (r) => { const b = el("button", {}, "zoom"); b.onclick = () => zoomTo(r.x0, r.x1); return b; } },
+  ], o.runs);
+}
+function renderSignalTable() {
+  table("#signals", [
+    { h: "ID", f: (m) => m.id },
+    { h: "Mensagem", f: (m) => m.message },
+    { h: "Sinal", f: (m) => m.signal },
+    { h: "Confiança", f: (m) => badge(m.confidence) },
+    { h: "Mín", num: true, f: (m) => valueLabel(m, m.min) },
+    { h: "Máx", num: true, f: (m) => valueLabel(m, m.max) },
+    { h: "Último", num: true, f: (m) => valueLabel(m, m.last) },
+    { h: "Mudanças", num: true, f: (m) => m.changes ? fmtInt.format(m.changes) : "constante" },
+    { h: "Distintos", num: true, f: (m) => String(m.distinct) },
+    { h: "Observação", f: (m) => m.comment, cls: () => "muted" },
+  ], visibleMeta());
+}
+function renderIds() {
+  table("#ids", [
+    { h: "ID", f: (r) => r.id },
+    { h: "Mensagem", f: (r) => r.message || "— sem definição", cls: (r) => r.message ? "" : "muted" },
+    { h: "Frames", num: true, f: (r) => fmtInt.format(r.frames) },
+    { h: "% do total", num: true, f: (r) => fmtNum(r.share) + "%" },
+    { h: "DLC", num: true, f: (r) => r.dlc.join(", ") },
+    { h: "Checksum", num: true, f: (r) => r.checksum_bad === null ? "não usa" : (r.checksum_bad ? `${fmtInt.format(r.checksum_bad)} ruins` : "100% ok"),
+      cls: (r) => r.checksum_bad ? "bad" : "" },
+    { h: "Saltos de contador", num: true, f: (r) => fmtInt.format(r.counter_jumps), cls: (r) => r.counter_jumps ? "bad" : "" },
+  ], S.ov.ids);
+  table("#jumps", [
+    { h: "#", f: (j) => String(S.ov.jump_clusters.indexOf(j) + 1) },
+    { h: "Linhas", f: (j) => `${fmtInt.format(j.line0)} – ${fmtInt.format(j.line1)}`, cls: () => "nowrap" },
+    { h: "Saltos", num: true, f: (j) => fmtInt.format(j.count) },
+    { h: "", f: (j) => { const b = el("button", {}, "zoom"); const pad = Math.max(500, (j.x1 - j.x0) * 2);
+        b.onclick = () => zoomTo(j.x0 - pad, j.x1 + pad); return b; } },
+  ], S.ov.jump_clusters);
+}
+
+// ---------------------------------------------------------------- gráficos
+const M = { l: 52, r: 12, t: 8, b: 22 };
+const LANE_H = 22, LANE_LEFT = 210;
+
+function niceTicks(lo, hi, n) {
+  if (lo === hi) { lo -= 1; hi += 1; }
+  const raw = (hi - lo) / n, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * p).find((s) => s >= raw);
+  const out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-9; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+function bisect(xs, x) {
+  let lo = 0, hi = xs.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (xs[mid] < x) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+function valueAt(series, x) {
+  if (!series) return null;
+  if (series.mode === "intervals") return series.iv.some(([a, b]) => x >= a && x <= b) ? 1 : 0;
+  const xs = series.x;
+  if (!xs.length) return null;
+  let i = bisect(xs, x);
+  if (series.mode === "raw") {              // degrau: vale o último ponto <= x
+    if (i >= xs.length || xs[i] > x) i -= 1;
+    return i < 0 ? null : series.v[i];
+  }
+  if (i >= xs.length) i = xs.length - 1;
+  if (i > 0 && Math.abs(xs[i - 1] - x) < Math.abs(xs[i] - x)) i -= 1;
+  return { mean: series.mean[i], min: series.min[i], max: series.max[i] };
+}
+
+function xScale(w, left) {
+  const v = S.view, span = (v.x1 - v.x0) || 1;
+  return { px: (x) => left + (x - v.x0) / span * (w - left - M.r), inv: (p) => v.x0 + (p - left) / (w - left - M.r) * span };
+}
+function drawXAxis(svg, w, h, left, sx) {
+  const ticks = niceTicks(S.view.x0, S.view.x1, Math.max(2, Math.floor((w - left) / 120)));
+  for (const t of ticks) {
+    if (t < S.view.x0 || t > S.view.x1) continue;
+    const x = sx.px(t);
+    svg.append(el("svg:text", { x, y: h - 6, "text-anchor": "middle" },
+      S.ov.x_kind === "time" ? (t - S.ov.x0).toFixed(0) + "s" : compact(t)));
+  }
+}
+function drawJumps(svg, top, bottom, sx) {
+  for (const j of S.ov.jump_clusters) {
+    if (j.x1 < S.view.x0 || j.x0 > S.view.x1) continue;
+    const x = sx.px(Math.max(j.x0, S.view.x0));
+    const t = el("svg:line", { x1: x, x2: x, y1: top, y2: bottom, stroke: "var(--critical)", "stroke-width": 1, "stroke-dasharray": "2 3" });
+    svg.append(t);
+  }
+}
+function drawRuns(svg, top, bottom, sx) {
+  drawJumps(svg, top, bottom, sx);
+  for (const r of S.ov.runs) {
+    const a = Math.max(r.x0, S.view.x0), b = Math.min(r.x1, S.view.x1);
+    if (b <= a) continue;
+    svg.append(el("svg:rect", { x: sx.px(a), y: top, width: Math.max(1, sx.px(b) - sx.px(a)), height: bottom - top, fill: "var(--run-wash)" }));
+  }
+}
+
+function lineCard(meta) {
+  const card = el("div", { class: "card" });
+  const head = el("div", { class: "card-head" });
+  const readout = el("span", { class: "readout" });
+  head.append(el("span", { class: "name" }, meta.signal), el("span", { class: "msg" }, `${meta.message} · 0x${meta.id}`), badge(meta.confidence), readout);
+  card.append(head);
+  if (meta.comment) card.append(el("p", { class: "comment" }, meta.comment));
+  const svg = el("svg:svg", { class: "chart", role: "img", "aria-label": `${meta.signal} ao longo do log` });
+  card.append(svg);
+  return { kind: "line", meta, card, svg, readout };
+}
+function drawLine(c) {
+  const series = S.chart.series[c.meta.key];
+  const w = Math.round(c.svg.getBoundingClientRect().width) || 400, h = 150;
+  c.svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  c.svg.setAttribute("height", h);
+  c.svg.replaceChildren();
+  c.w = w; c.h = h;
+  const sx = xScale(w, M.l); c.sx = sx;
+  const top = M.t, bottom = h - M.b;
+  if (!series || !series.x.length) {
+    c.svg.append(el("svg:text", { x: w / 2, y: h / 2, "text-anchor": "middle" }, "sem amostras neste trecho"));
+    return;
+  }
+  let lo = Infinity, hi = -Infinity;
+  const lows = series.mode === "band" ? series.min : series.v, highs = series.mode === "band" ? series.max : series.v;
+  for (let i = 0; i < lows.length; i++) { if (lows[i] < lo) lo = lows[i]; if (highs[i] > hi) hi = highs[i]; }
+  const ticks = niceTicks(lo, hi, 3);
+  const y0 = Math.min(ticks[0], lo), y1 = Math.max(ticks[ticks.length - 1], hi);
+  const py = (v) => bottom - (v - y0) / ((y1 - y0) || 1) * (bottom - top);
+  c.py = py;
+  for (const t of ticks) {
+    const y = py(t);
+    c.svg.append(el("svg:line", { x1: M.l, x2: w - M.r, y1: y, y2: y, stroke: "var(--grid)", "stroke-width": 1 }));
+    c.svg.append(el("svg:text", { x: M.l - 6, y: y + 4, "text-anchor": "end" }, compact(t)));
+  }
+  drawRuns(c.svg, top, bottom, sx);
+  c.svg.append(el("svg:line", { x1: M.l, x2: w - M.r, y1: bottom, y2: bottom, stroke: "var(--axis)", "stroke-width": 1 }));
+  drawXAxis(c.svg, w, h, M.l, sx);
+  const step = c.meta.kind === "step";
+  let d = "";
+  if (series.mode === "band") {
+    let area = "";
+    for (let i = 0; i < series.x.length; i++) area += (i ? "L" : "M") + sx.px(series.x[i]).toFixed(1) + "," + py(series.max[i]).toFixed(1);
+    for (let i = series.x.length - 1; i >= 0; i--) area += "L" + sx.px(series.x[i]).toFixed(1) + "," + py(series.min[i]).toFixed(1);
+    c.svg.append(el("svg:path", { d: area + "Z", fill: "var(--series-1-wash)" }));
+    for (let i = 0; i < series.x.length; i++) d += (i ? "L" : "M") + sx.px(series.x[i]).toFixed(1) + "," + py(series.mean[i]).toFixed(1);
+  } else {
+    for (let i = 0; i < series.x.length; i++) {
+      const x = Math.max(M.l, sx.px(series.x[i])), y = py(series.v[i]);
+      if (!i) d = `M${x.toFixed(1)},${y.toFixed(1)}`;
+      else d += step ? `H${x.toFixed(1)}V${y.toFixed(1)}` : `L${x.toFixed(1)},${y.toFixed(1)}`;
+    }
+    if (step) d += `H${(w - M.r).toFixed(1)}`;
+  }
+  c.svg.append(el("svg:path", { d, fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  c.cross = el("svg:line", { y1: top, y2: bottom, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden" });
+  c.dot = el("svg:circle", { r: 4, fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" });
+  c.brush = el("svg:rect", { y: top, height: bottom - top, fill: "var(--brush)", visibility: "hidden" });
+  c.svg.append(c.brush, c.cross, c.dot);
+  c.left = M.l;
+  attachPointer(c);
+}
+
+function lanesCard(metas) {
+  const card = el("div", { class: "card wide" });
+  const head = el("div", { class: "card-head" });
+  const readout = el("span", { class: "readout" });
+  head.append(el("span", { class: "name" }, "Estados de 1 bit"), el("span", { class: "msg" }, "barra = sinal em 1 (pisca, freio, portas…)"), readout);
+  card.append(head);
+  const svg = el("svg:svg", { class: "chart", role: "img", "aria-label": "Linha do tempo dos sinais de 1 bit" });
+  card.append(svg);
+  return { kind: "lanes", metas, card, svg, readout };
+}
+function drawLanes(c) {
+  const w = Math.round(c.svg.getBoundingClientRect().width) || 800;
+  const left = w < 520 ? 130 : LANE_LEFT;
+  const h = M.t + c.metas.length * LANE_H + M.b;
+  c.svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  c.svg.setAttribute("height", h);
+  c.svg.replaceChildren();
+  c.w = w; c.h = h; c.left = left;
+  const sx = xScale(w, left); c.sx = sx;
+  const bottom = h - M.b;
+  drawRuns(c.svg, M.t, bottom, sx);
+  c.marks = [];
+  c.metas.forEach((m, i) => {
+    const y = M.t + i * LANE_H;
+    c.svg.append(el("svg:line", { x1: left, x2: w - M.r, y1: y + LANE_H - 1, y2: y + LANE_H - 1, stroke: "var(--grid)", "stroke-width": 1 }));
+    const label = el("svg:text", { x: left - 18, y: y + 15, "text-anchor": "end", class: "lane-label" }, m.signal);
+    const title = el("svg:title", {}, `${m.message}.${m.signal} (0x${m.id}) — ${m.confidence.toLowerCase()}`);
+    label.append(title);
+    const dot = el("svg:circle", { cx: left - 9, cy: y + 11, r: 4, fill: "none", stroke: "var(--axis)", "stroke-width": 1.5 });
+    c.svg.append(label, dot);
+    c.marks.push(dot);
+    const s = S.chart.series[m.key];
+    if (!s) return;
+    for (const [a, b] of s.iv) {
+      const x = sx.px(a);
+      c.svg.append(el("svg:rect", { x, y: y + 5, width: Math.max(2, sx.px(b) - x), height: LANE_H - 10, rx: 2, fill: "var(--series-1)" }));
+    }
+  });
+  c.svg.append(el("svg:line", { x1: left, x2: w - M.r, y1: bottom, y2: bottom, stroke: "var(--axis)", "stroke-width": 1 }));
+  drawXAxis(c.svg, w, h, left, sx);
+  c.cross = el("svg:line", { y1: M.t, y2: bottom, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden" });
+  c.brush = el("svg:rect", { y: M.t, height: bottom - M.t, fill: "var(--brush)", visibility: "hidden" });
+  c.svg.append(c.brush, c.cross);
+  attachPointer(c);
+}
+
+// ---------------------------------------------------------------- cursor / zoom
+function svgX(c, ev) {
+  const r = c.svg.getBoundingClientRect();
+  return (ev.clientX - r.left) * (c.w / r.width);
+}
+function attachPointer(c) {
+  if (c.wired) return;
+  c.wired = true;
+  c.svg.addEventListener("pointermove", (ev) => {
+    const p = svgX(c, ev);
+    if (c.drag !== undefined) {
+      const a = Math.max(c.left, Math.min(c.drag, p)), b = Math.min(c.w - M.r, Math.max(c.drag, p));
+      c.brush.setAttribute("x", a); c.brush.setAttribute("width", b - a); c.brush.setAttribute("visibility", "visible");
+    }
+    if (p < c.left || p > c.w - M.r) { setCursor(null); return; }
+    setCursor(c.sx.inv(p), c, ev);
+  });
+  c.svg.addEventListener("pointerleave", () => { if (c.drag === undefined) setCursor(null); });
+  c.svg.addEventListener("pointerdown", (ev) => { c.drag = svgX(c, ev); c.svg.setPointerCapture(ev.pointerId); });
+  c.svg.addEventListener("pointerup", (ev) => {
+    const a = c.drag, b = svgX(c, ev);
+    c.drag = undefined;
+    c.brush.setAttribute("visibility", "hidden");
+    if (a !== undefined && Math.abs(b - a) > 6) {
+      const x0 = c.sx.inv(Math.max(c.left, Math.min(a, b))), x1 = c.sx.inv(Math.min(c.w - M.r, Math.max(a, b)));
+      zoomTo(x0, x1);
+    }
+  });
+  c.svg.addEventListener("dblclick", () => zoomTo(S.ov.x0, S.ov.x1));
+}
+function setCursor(x, src, ev) {
+  S.cursor = x;
+  const tip = $("#tip");
+  for (const c of S.charts) {
+    if (!c.cross) continue;
+    if (x === null) {
+      c.cross.setAttribute("visibility", "hidden");
+      if (c.dot) c.dot.setAttribute("visibility", "hidden");
+      c.readout.replaceChildren();
+      if (c.marks) c.marks.forEach((d) => d.setAttribute("fill", "none"));
+      continue;
+    }
+    const px = c.sx.px(x);
+    c.cross.setAttribute("x1", px); c.cross.setAttribute("x2", px); c.cross.setAttribute("visibility", "visible");
+    if (c.kind === "line") {
+      const v = valueAt(S.chart.series[c.meta.key], x);
+      c.readout.replaceChildren();
+      if (v === null) { c.dot.setAttribute("visibility", "hidden"); continue; }
+      const main = typeof v === "object" ? v.mean : v;
+      c.readout.append(el("b", {}, valueLabel(c.meta, typeof v === "object" ? Math.round(main * 100) / 100 : v)));
+      if (typeof v === "object" && v.min !== v.max) c.readout.append(` (${fmtNum(v.min)}–${fmtNum(v.max)})`);
+      if (c.py) { c.dot.setAttribute("cx", px); c.dot.setAttribute("cy", c.py(main)); c.dot.setAttribute("visibility", "visible"); }
+    } else {
+      const on = c.metas.filter((m, i) => {
+        const v = valueAt(S.chart.series[m.key], x);
+        c.marks[i].setAttribute("fill", v ? "var(--series-1)" : "none");
+        return v;
+      });
+      c.readout.replaceChildren(el("b", {}, on.length ? on.map((m) => m.signal).join(", ") : "nenhum em 1"));
+    }
+  }
+  if (x === null || !src) { tip.style.display = "none"; return; }
+  tip.replaceChildren();
+  if (src.kind === "line") {
+    const v = valueAt(S.chart.series[src.meta.key], x);
+    const vv = v === null ? "—" : valueLabel(src.meta, typeof v === "object" ? Math.round(v.mean * 100) / 100 : v);
+    tip.append(el("div", { class: "v" }, vv));
+    const k = el("div", { class: "k" }); k.append(el("i"), document.createTextNode(src.meta.signal)); tip.append(k);
+    if (v && typeof v === "object") tip.append(el("div", { class: "w" }, `média do trecho · mín ${fmtNum(v.min)} · máx ${fmtNum(v.max)}`));
+  } else {
+    const r = src.svg.getBoundingClientRect();
+    const lane = Math.floor(((ev.clientY - r.top) * (src.h / r.height) - M.t) / LANE_H);
+    const m = src.metas[lane];
+    if (!m) { tip.style.display = "none"; return; }
+    tip.append(el("div", { class: "v" }, valueAt(S.chart.series[m.key], x) ? "1 (ativo)" : "0"));
+    const k = el("div", { class: "k" }); k.append(el("i"), document.createTextNode(`${m.message}.${m.signal}`)); tip.append(k);
+  }
+  tip.append(el("div", { class: "w" }, fmtX(x)));
+  tip.style.display = "block";
+  const tx = Math.min(ev.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
+  tip.style.left = tx + "px";
+  tip.style.top = (ev.clientY + 14) + "px";
+}
+
+async function zoomTo(x0, x1) {
+  if (!S.ov) return;
+  x0 = Math.max(S.ov.x0, x0); x1 = Math.min(S.ov.x1, x1);
+  if (x1 - x0 < 2) return;
+  await loadChart(x0, x1);
+}
+function renderZoomInfo() {
+  const full = S.view.x0 <= S.ov.x0 && S.view.x1 >= S.ov.x1;
+  $("#reset").disabled = full;
+  $("#zoominfo").textContent = full ? "" : `${fmtX(S.view.x0)} → ${fmtX(S.view.x1)}`;
+}
+
+function buildCharts() {
+  const box = $("#charts");
+  box.replaceChildren();
+  S.charts = [];
+  const metas = visibleMeta().filter((m) => S.chart.series[m.key] !== undefined || m.changes);
+  const bins = metas.filter((m) => m.kind === "binary" && m.changes);
+  const lines = metas.filter((m) => m.kind !== "binary" && m.changes);
+  if (bins.length) { const c = lanesCard(bins); box.append(c.card); S.charts.push(c); }
+  for (const m of lines) { const c = lineCard(m); box.append(c.card); S.charts.push(c); }
+  if (!S.charts.length) box.append(el("div", { class: "empty card wide" }, "nenhum sinal variável com esse filtro"));
+  drawAll();
+}
+function drawAll() { for (const c of S.charts) (c.kind === "line" ? drawLine : drawLanes)(c); }
+
+// ---------------------------------------------------------------- carga
+async function loadChart(x0, x1) {
+  const id = ++S.req;
+  $("#charts").classList.add("loading");
+  const bins = Math.max(200, Math.min(1600, Math.round(($("#charts").clientWidth || 800) / 1.5)));
+  let url = `/api/chart?file=${encodeURIComponent(S.file)}&bins=${bins}`;
+  if (x0 !== undefined) url += `&x0=${x0}&x1=${x1}`;
+  try {
+    const data = await getJSON(url);
+    if (id !== S.req) return;
+    S.chart = data;
+    S.view = { x0: data.x0, x1: data.x1 };
+    if (!S.charts.length) buildCharts(); else drawAll();
+    renderZoomInfo();
+  } catch (e) {
+    $("#status").textContent = "erro: " + e.message;
+  } finally {
+    if (id === S.req) $("#charts").classList.remove("loading");
+  }
+}
+async function loadFile(name) {
+  S.file = name; S.charts = []; S.ov = null;
+  const f = S.files.find((x) => x.name === name);
+  $("#status").textContent = f && !f.loaded
+    ? `analisando ${name} (${(f.size / 1e6).toFixed(1)} MB)… a primeira vez leva alguns segundos`
+    : `carregando ${name}…`;
+  try { localStorage.setItem("can-honda-file", name); } catch (e) {}
+  try {
+    S.ov = await getJSON(`/api/overview?file=${encodeURIComponent(name)}`);
+    if (f) f.loaded = true;
+    renderTiles(); renderRuns(); renderSignalTable(); renderIds();
+    await loadChart();
+    $("#status").textContent = `${S.ov.file} · ${S.ov.signals.length} sinais decodificados`;
+    $("#foot").textContent = `${S.ov.file}: ${fmtInt.format(S.ov.frames)} frames` +
+      (S.ov.skipped ? `, ${fmtInt.format(S.ov.skipped)} linhas ignoradas` : "") +
+      ` · eixo X = ${S.ov.x_kind === "time" ? "tempo (s)" : "nº da linha no arquivo"} · checksum ruim não entra nas séries`;
+  } catch (e) {
+    $("#status").textContent = "erro: " + e.message;
+  }
+}
+function refilter() {
+  if (!S.ov || !S.chart) return;
+  renderSignalTable();
+  S.charts = [];
+  buildCharts();
+}
+
+async function init() {
+  S.files = await getJSON("/api/files");
+  const sel = $("#file");
+  for (const f of S.files) sel.append(el("option", { value: f.name }, `${f.name} (${(f.size / 1e6).toFixed(1)} MB)`));
+  let pick = null;
+  try { pick = localStorage.getItem("can-honda-file"); } catch (e) {}
+  if (!S.files.some((f) => f.name === pick)) pick = S.files.length ? S.files[0].name : null;
+  sel.value = pick;
+  sel.onchange = () => loadFile(sel.value);
+  $("#conf").onchange = refilter;
+  let t; $("#q").oninput = () => { clearTimeout(t); t = setTimeout(refilter, 200); };
+  $("#reset").onclick = () => zoomTo(S.ov.x0, S.ov.x1);
+  let rt, lastW = 0;
+  new ResizeObserver(([e]) => {
+    const w = Math.round(e.contentRect.width);
+    if (w === lastW) return;
+    lastW = w; clearTimeout(rt); rt = setTimeout(() => S.chart && drawAll(), 100);
+  }).observe($("#charts"));
+  if (pick) loadFile(pick); else $("#status").textContent = "nenhum log";
+}
+init().catch((e) => { $("#status").textContent = "erro: " + e.message; });
+</script>
+</body>
+</html>

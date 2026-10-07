@@ -10,12 +10,20 @@ não adicionar dependências (python-can, cantools).
 - `can_honda/dbc.py` — parser DBC mínimo (BO_/SG_/CM_/VAL_), Motorola+Intel, signed
 - `can_honda/data/honda_civic_2014.dbc` — **a fonte de verdade dos sinais**
 - `can_honda/decoder.py` — Decoder (frame → valores + integridade) e BusState (último valor/mudanças)
-- `can_honda/cli.py` — stats / decode / csv / bytes / summary / signals / live
+- `can_honda/cli.py` — stats / decode / csv / bytes / summary / signals / live / web
+- `can_honda/analysis.py` — passada única no log: séries brutas por sinal (array), estatísticas,
+  ciclos de motor, saltos de contador agrupados; reamostra (raw ou faixa mín/máx/média) por recorte
+- `can_honda/web.py` + `static/index.html` — dashboard (http.server, SVG à mão, sem CDN);
+  só serve arquivos da lista (por nome), padrão `~/claude/can*.log`, porta 8090
 
 ## Dados reais
 - `~/claude/can-sample-0.log` e `can-sample-1.log` — candump padrão, SEM timestamp, carro parado
 - `~/can.log` é prefixo idêntico de can-sample-0.log; `~/savvy-honda-obd` é CSV do SavvyCAN (com ts µs)
 - scripts antigos de referência (não confiáveis): `~/Downloads/civic_can.py`, `python-can-decode-v1.py`
+
+## Fatos dos logs
+- Saltos de contador só nos ciclos de ignição (sample-0 L~505600/~512700, sample-1 L~149600) =
+  módulos reiniciando, não perda de captura. (Cuidado: no `stats` a coluna Hz vazia desloca campos no awk.)
 
 ## Regras
 - Todo sinal novo no DBC leva tag de confiança no `CM_ SG_`: `[CONFIRMADO]` só com evidência nos logs

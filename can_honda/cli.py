@@ -6,12 +6,14 @@ Comandos:
   csv      snapshot do estado do barramento em CSV (um registro a cada N frames de um ID)
   bytes    análise por byte de um ID (valores distintos, nº de mudanças) — para descobrir sinais
   summary  ciclos de motor (RPM > 0): duração, RPM, temperaturas, combustível
+  web      dashboard no navegador (sinais, gráficos, integridade, ciclos de motor)
   signals  lista os sinais do DBC com unidade e confiança
   live     igual ao decode, mas lendo de uma interface SocketCAN
 """
 
 import argparse
 import csv
+import os
 import sys
 from collections import defaultdict
 
@@ -163,44 +165,27 @@ def cmd_bytes(args):
 
 # ---------------------------------------------------------------- summary
 def cmd_summary(args):
-    dec = Decoder(load_dbc(args.dbc))
-    state = BusState()
-    runs, cur = [], None
-    for f in _frames(args.files):
-        d = dec.decode(f)
-        state.update(d)
-        if f.can_id != 0x17C or d.checksum_ok is False:
-            continue
-        rpm = d.values.get("ENGINE_RPM", 0)
-        sv = state.values
-        if rpm > 0 and cur is None:
-            cur = {"start": f.line_no, "t0": f.ts, "n": 0, "rpm_max": 0, "rpm": [],
-                   "ect0": sv.get("ENGINE_STATUS.COOLANT_TEMP"),
-                   "iat0": sv.get("ENGINE_STATUS.INTAKE_TEMP")}
-        if cur is not None and rpm > 0:
-            cur["n"] += 1
-            cur["rpm_max"] = max(cur["rpm_max"], rpm)
-            cur["rpm"].append(rpm)
-            cur["end"], cur["t1"] = f.line_no, f.ts
-            cur["ect1"] = sv.get("ENGINE_STATUS.COOLANT_TEMP")
-            cur["iat1"] = sv.get("ENGINE_STATUS.INTAKE_TEMP")
-            cur["fuel"] = sv.get("ENGINE_STATUS.TRIP_FUEL_CONSUMED")
-        elif cur is not None:
-            runs.append(cur)
-            cur = None
-    if cur is not None:
-        runs.append(cur)
-    print(f"{len(runs)} ciclo(s) de motor")
-    for i, r in enumerate(runs, 1):
-        tail = sorted(r["rpm"][-max(1, len(r["rpm"]) // 10):])
-        idle = tail[len(tail) // 2]
-        dur = (f"{r['t1'] - r['t0']:.1f} s" if r["t0"] is not None
-               else f"{r['n']} frames 0x17C (sem timestamp)")
-        print(f"  #{i}: linhas {r['start']}-{r['end']}  {dur}\n"
-              f"      RPM max {r['rpm_max']}  marcha lenta final ~{idle}\n"
-              f"      liquido arref. {r['ect0']} -> {r['ect1']} C   "
-              f"ar admissao {r['iat0']} -> {r['iat1']} C   "
-              f"TRIP_FUEL_CONSUMED {r['fuel']}")
+    from .analysis import Analysis
+    db = load_dbc(args.dbc)
+    for path in args.files:
+        a = Analysis(path, db)
+        if len(args.files) > 1:
+            print(f"== {path}")
+        print(f"{len(a.runs)} ciclo(s) de motor")
+        for i, r in enumerate(a.runs, 1):
+            dur = (f"{r['x1'] - r['x0']:.1f} s" if a.x_kind == "time"
+                   else f"{r['frames']} frames 0x17C (sem timestamp)")
+            print(f"  #{i}: linhas {r['line0']}-{r['line1']}  {dur}\n"
+                  f"      RPM max {r['rpm_max']}  marcha lenta final ~{r['idle_end']}\n"
+                  f"      liquido arref. {r['coolant0']} -> {r['coolant1']} C   "
+                  f"ar admissao {r['intake0']} -> {r['intake1']} C   "
+                  f"TRIP_FUEL_CONSUMED {r['fuel']}")
+    return 0
+
+
+def cmd_web(args):
+    from .web import serve
+    serve(args.sources or [os.path.expanduser("~/claude/can*.log")], args.dbc, args.host, args.port)
     return 0
 
 
@@ -254,6 +239,11 @@ def build_parser():
     sp.add_argument("--id", type=_hexid, action="append"); sp.set_defaults(fn=cmd_bytes)
     sp = sub.add_parser("summary"); files(sp); sp.set_defaults(fn=cmd_summary)
     sp = sub.add_parser("signals"); sp.set_defaults(fn=cmd_signals)
+    sp = sub.add_parser("web", help="dashboard web")
+    sp.add_argument("sources", nargs="*", help="logs, globs ou pastas (padrão: ~/claude/can*.log)")
+    sp.add_argument("--host", default="127.0.0.1")
+    sp.add_argument("--port", type=int, default=8090)
+    sp.set_defaults(fn=cmd_web)
     return p
 
 
