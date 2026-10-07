@@ -9,6 +9,8 @@ IDs de 11 bits). Python **stdlib pura**, sem `python-can` nem `cantools`.
   que também abre no SavvyCAN / CANdevStudio
 - lê **ao vivo** via SocketCAN (`socket.AF_CAN`)
 
+Referência dos IDs e sinais confirmados: **[docs/ids-confirmados.md](docs/ids-confirmados.md)**.
+
 ## Uso
 
 ```bash
