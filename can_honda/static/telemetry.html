@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Civic Telemetria</title>
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --surface-2: #f1f0ec;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6;
+  --series-2: #d9822b;
+  --good: #2f9e61;
+  --warn: #d9a21b;
+  --critical: #d03b3b;
+  --track-0: #2a78d6; --track-1: #2f9e61; --track-2: #d9a21b; --track-3: #d9822b; --track-4: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19; --surface-2: #242423;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+    --grid: #2c2c2a; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-2: #e8954a;
+    --good: #3fb874; --warn: #e6b532; --critical: #e5534b;
+    --track-0: #3987e5; --track-1: #3fb874; --track-2: #e6b532; --track-3: #e8954a; --track-4: #e5534b;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19; --surface-2: #242423;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+  --grid: #2c2c2a; --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --series-2: #e8954a;
+  --good: #3fb874; --warn: #e6b532; --critical: #e5534b;
+  --track-0: #3987e5; --track-1: #3fb874; --track-2: #e6b532; --track-3: #e8954a; --track-4: #e5534b;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--page); color: var(--text-primary);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  display: flex; flex-direction: column;
+}
+.num { font-variant-numeric: tabular-nums; }
+header {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface-1);
+}
+header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+header .vin { color: var(--text-muted); font-size: 12px; letter-spacing: .04em; }
+header .spacer { flex: 1; }
+header a { color: var(--text-secondary); font-size: 13px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+  padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-secondary);
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+.dot.ok { background: var(--good); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--critical); }
+main { flex: 1; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(360px, 1fr); min-height: 0; }
+#mapwrap { position: relative; min-height: 360px; }
+#map { position: absolute; inset: 0; background: var(--surface-2); }
+.mapctl { position: absolute; top: 10px; right: 10px; z-index: 500; display: flex; gap: 6px; }
+.mapctl button {
+  font: inherit; font-size: 12px; padding: 5px 10px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
+}
+.mapctl button[aria-pressed="true"] { border-color: var(--series-1); color: var(--series-1); }
+.legend {
+  position: absolute; left: 10px; bottom: 22px; z-index: 500; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 11px; color: var(--text-secondary);
+}
+.legend span.sw { display: inline-block; width: 18px; height: 4px; border-radius: 2px; vertical-align: middle; margin: 0 3px 0 8px; }
+.legend span.sw:first-of-type { margin-left: 0; }
+#side { overflow-y: auto; padding: 12px; display: grid; gap: 10px; align-content: start; border-left: 1px solid var(--border); }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.card h2 { margin: 0 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.speed { display: flex; align-items: baseline; gap: 6px; }
+.speed .big { font-size: 56px; font-weight: 650; line-height: 1; }
+.speed .unit { color: var(--text-muted); }
+.gear .big { font-size: 56px; font-weight: 650; line-height: 1; }
+.sub { color: var(--text-secondary); font-size: 12px; margin-top: 4px; }
+.sub b { color: var(--text-primary); font-weight: 600; }
+.bar { height: 10px; border-radius: 5px; background: var(--surface-2); overflow: hidden; position: relative; }
+.bar > i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--series-1); border-radius: 5px; transition: width .15s; }
+.bar.rpm > i.red { background: var(--critical); }
+.bar .redline { position: absolute; top: 0; bottom: 0; left: 92.8%; right: 0; background: color-mix(in srgb, var(--critical) 25%, transparent); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 13px; }
+.kv dt { color: var(--text-secondary); }
+.kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.kv .hyp { color: var(--text-muted); font-size: 11px; }
+.lamps { display: flex; flex-wrap: wrap; gap: 6px; }
+.lamp { font-size: 12px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-muted); }
+.lamp.on { color: var(--page); background: var(--good); border-color: transparent; }
+.lamp.alert.on { background: var(--critical); }
+.lamp.amber.on { background: var(--warn); color: #000; }
+.gm { display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: center; }
+svg text { fill: var(--text-muted); font-size: 10px; }
+.spark { width: 100%; height: 70px; display: block; }
+.empty { color: var(--text-muted); font-size: 12px; }
+.car-icon svg { filter: drop-shadow(0 0 2px rgba(0,0,0,.5)); }
+@media (max-width: 860px) {
+  main { grid-template-columns: 1fr; }
+  #mapwrap { min-height: 55vh; }
+  #side { border-left: 0; border-top: 1px solid var(--border); }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Civic 2014 · Telemetria</h1>
+  <span class="vin" id="vin"></span>
+  <span class="spacer"></span>
+  <span class="chip" id="chip-can"><span class="dot"></span><span>CAN</span></span>
+  <span class="chip" id="chip-gps"><span class="dot"></span><span>GPS</span></span>
+  <span class="chip num" id="clock">--:--:--</span>
+  <a href="/">análise ›</a>
+</header>
+<main>
+  <div id="mapwrap">
+    <div id="map"></div>
+    <div class="mapctl">
+      <button id="btn-follow" aria-pressed="true">Seguir carro</button>
+      <button id="btn-fit">Trajeto todo</button>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+  <div id="side">
+    <div class="row2">
+      <div class="card">
+        <h2>Velocidade</h2>
+        <div class="speed"><span class="big num" id="spd">–</span><span class="unit">km/h</span></div>
+        <div class="sub num">GPS <b id="spd-gps">–</b> km/h · velocímetro <b id="spd-err">–</b></div>
+      </div>
+      <div class="card gear">
+        <h2>Marcha (estimada)</h2>
+        <div class="big num" id="gear">–</div>
+        <div class="sub num">RPM/km/h <b id="ratio">–</b> · câmbio <b id="trans">–</b></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Motor</h2>
+      <div class="speed" style="margin-bottom:6px"><span class="big num" id="rpm" style="font-size:34px">–</span><span class="unit">rpm</span></div>
+      <div class="bar rpm"><span class="redline"></span><i id="rpm-bar" style="width:0"></i></div>
+      <div class="row2" style="margin-top:10px">
+        <div><div class="sub">Acelerador <b class="num" id="ped">–</b></div><div class="bar"><i id="ped-bar" style="width:0"></i></div></div>
+        <div><div class="sub">Torque estimado <b class="num" id="torque">–</b></div><div class="lamps" style="margin-top:4px"><span class="lamp alert" id="l-brake">FREIO</span></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Forças G</h2>
+      <div class="gm">
+        <svg viewBox="-60 -60 120 120" width="120" height="120" aria-label="g-meter">
+          <circle r="55" fill="none" stroke="var(--grid)"/>
+          <circle r="36.7" fill="none" stroke="var(--grid)" stroke-dasharray="2 3"/>
+          <circle r="18.3" fill="none" stroke="var(--grid)" stroke-dasharray="2 3"/>
+          <line x1="-55" x2="55" stroke="var(--grid)"/><line y1="-55" y2="55" stroke="var(--grid)"/>
+          <text x="2" y="-40">0,4</text><text x="2" y="-21">0,2</text>
+          <circle id="gdot" r="6" fill="var(--series-1)"/>
+        </svg>
+        <dl class="kv">
+          <dt>Longitudinal</dt><dd id="glong">–</dd>
+          <dt>Lateral</dt><dd id="glat">–</dd>
+          <dt>Rampa</dt><dd id="grade">–</dd>
+          <dt>Altitude</dt><dd id="alt">–</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Últimos 5 min</h2>
+      <svg class="spark" id="spark-spd" viewBox="0 0 300 70" preserveAspectRatio="none"></svg>
+      <div class="sub"><span style="color:var(--series-1)">━</span> CAN km/h &nbsp; <span style="color:var(--series-2)">━</span> GPS km/h &nbsp; <span id="spark-spd-max"></span></div>
+      <svg class="spark" id="spark-rpm" viewBox="0 0 300 70" preserveAspectRatio="none" style="margin-top:8px"></svg>
+      <div class="sub"><span style="color:var(--series-1)">━</span> RPM &nbsp; <span id="spark-rpm-max"></span></div>
+    </div>
+    <div class="row2">
+      <div class="card">
+        <h2>Percurso</h2>
+        <dl class="kv">
+          <dt>Tempo</dt><dd id="t-el">–</dd>
+          <dt>Em movimento</dt><dd id="t-mov">–</dd>
+          <dt>Distância CAN</dt><dd id="d-can">–</dd>
+          <dt>Distância GPS</dt><dd id="d-gps">–</dd>
+          <dt>Contador 0x377 <span class="hyp">hip.</span></dt><dd id="d-cnt">–</dd>
+          <dt>Média</dt><dd id="v-avg">–</dd>
+          <dt>Máxima</dt><dd id="v-max">–</dd>
+          <dt>RPM máx.</dt><dd id="r-max">–</dd>
+          <dt>Combustível (bruto)</dt><dd id="fuel">–</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h2>Temperaturas e GPS</h2>
+        <dl class="kv">
+          <dt>Arrefecimento</dt><dd id="coolant">–</dd>
+          <dt>Admissão</dt><dd id="intake">–</dd>
+          <dt>0x374 <span class="hyp">hip. externa</span></dt><dd id="tguess">–</dd>
+          <dt>Satélites</dt><dd id="sats">–</dd>
+          <dt>HDOP / fix</dt><dd id="hdop">–</dd>
+          <dt>Rumo</dt><dd id="course">–</dd>
+          <dt>Posição</dt><dd id="pos" style="font-size:12px">–</dd>
+          <dt>UTC</dt><dd id="utc" style="font-size:12px">–</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Carroceria</h2>
+      <div class="lamps">
+        <span class="lamp amber" id="l-left">◀ pisca</span>
+        <span class="lamp amber" id="l-right">pisca ▶</span>
+        <span class="lamp" id="l-lights">farol –</span>
+        <span class="lamp" id="l-belt">cinto</span>
+        <span class="lamp alert" id="l-fl">porta DE</span>
+        <span class="lamp alert" id="l-fr">porta DD</span>
+        <span class="lamp alert" id="l-rl">porta TE</span>
+        <span class="lamp alert" id="l-rr">porta TD</span>
+        <span class="lamp alert" id="l-trunk">porta-malas</span>
+      </div>
+      <div class="sub" style="margin-top:6px">Lado dos piscas e portas seguem o layout opendbc (ainda não conferidos um a um).</div>
+    </div>
+  </div>
+</main>
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (v, d = 0, suf = "") => (v === null || v === undefined || Number.isNaN(v)) ? "–" : Number(v).toLocaleString("pt-BR", {minimumFractionDigits: d, maximumFractionDigits: d}) + suf;
+const hms = s => s == null ? "–" : [Math.floor(s / 3600), Math.floor(s % 3600 / 60), Math.floor(s % 60)].map((x, i) => i ? String(x).padStart(2, "0") : x).join(":");
+const lamp = (id, on) => $(id).classList.toggle("on", !!on);
+const RPM_MAX = 7000;
+const SPEED_BINS = [20, 40, 60, 90];          // km/h → cor do trajeto (track-0..4)
+const LIGHTS = {0: "farol –", 1: "lanterna", 2: "farol baixo", 3: "farol alto"};
+
+// ---------------------------------------------------------------- mapa
+const map = L.map("map", {zoomControl: true, attributionControl: true}).setView([-18.885, -48.24], 14);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+}).addTo(map);
+const trackLayer = L.layerGroup().addTo(map);
+const carIcon = deg => L.divIcon({
+  className: "car-icon", iconSize: [28, 28], iconAnchor: [14, 14],
+  html: `<svg viewBox="-14 -14 28 28" width="28" height="28" style="transform:rotate(${deg || 0}deg)">
+    <circle r="12" fill="${css("--series-1")}" stroke="#fff" stroke-width="2"/>
+    <path d="M0 -8 L6 5 L0 2 L-6 5 Z" fill="#fff"/></svg>`
+});
+let car = null, carDeg = null, follow = true, firstFix = true;
+const btnFollow = $("btn-follow");
+btnFollow.onclick = () => { follow = !follow; btnFollow.setAttribute("aria-pressed", follow); };
+map.on("dragstart", () => { follow = false; btnFollow.setAttribute("aria-pressed", "false"); });
+$("btn-fit").onclick = () => {
+  if (allPts.length > 1) { follow = false; btnFollow.setAttribute("aria-pressed", "false");
+    map.fitBounds(L.latLngBounds(allPts.map(p => [p.lat, p.lon])), {padding: [30, 30]}); }
+};
+function legend() {
+  const labels = ["<" + SPEED_BINS[0]].concat(SPEED_BINS.slice(1).map((b, i) => SPEED_BINS[i] + "–" + b), [">" + SPEED_BINS.at(-1)]);
+  $("legend").innerHTML = labels.map((l, i) => `<span class="sw" style="background:${css("--track-" + i)}"></span>${l}`).join("") + " km/h";
+}
+legend();
+const speedBin = p => { const v = p.can_kmh ?? p.gps_kmh ?? 0; let i = 0; while (i < SPEED_BINS.length && v >= SPEED_BINS[i]) i++; return i; };
+
+// trajeto: segmentos contínuos de mesma faixa de velocidade viram uma polyline
+let allPts = [], lastSeq = 0, curLine = null, curBin = -1;
+function addPoints(pts) {
+  for (const p of pts) {
+    const prev = allPts.at(-1);
+    allPts.push(p);
+    if (!prev) continue;
+    const gap = p.t - prev.t > 10;          // GPS perdido: não liga os pontos
+    const b = speedBin(p);
+    if (gap) { curLine = null; curBin = -1; continue; }
+    if (!curLine || b !== curBin) {
+      curLine = L.polyline([[prev.lat, prev.lon]], {color: css("--track-" + b), weight: 5, opacity: .9}).addTo(trackLayer);
+      curBin = b;
+    }
+    curLine.addLatLng([p.lat, p.lon]);
+  }
+  const cut = Date.now() / 1000 - 300;
+  while (allPts.length > 20000) allPts.shift();
+  sparks(allPts.filter(p => p.t >= cut));
+}
+
+// ---------------------------------------------------------------- sparklines
+function path(pts, key, max) {
+  if (pts.length < 2) return "";
+  const t0 = pts[0].t, span = Math.max(pts.at(-1).t - t0, 1);
+  return pts.filter(p => p[key] != null).map((p, i) => `${i ? "L" : "M"}${((p.t - t0) / span * 300).toFixed(1)},${(68 - p[key] / max * 64).toFixed(1)}`).join("");
+}
+function sparks(pts) {
+  const vmax = Math.max(40, ...pts.map(p => Math.max(p.can_kmh || 0, p.gps_kmh || 0)));
+  const rmax = Math.max(3000, ...pts.map(p => p.rpm || 0));
+  const grid = `<line x1="0" x2="300" y1="36" y2="36" stroke="${css("--grid")}" stroke-dasharray="2 3"/>`;
+  $("spark-spd").innerHTML = pts.length < 2 ? "" : grid +
+    `<path d="${path(pts, "gps_kmh", vmax)}" fill="none" stroke="${css("--series-2")}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>` +
+    `<path d="${path(pts, "can_kmh", vmax)}" fill="none" stroke="${css("--series-1")}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+  $("spark-rpm").innerHTML = pts.length < 2 ? "" : grid +
+    `<path d="${path(pts, "rpm", rmax)}" fill="none" stroke="${css("--series-1")}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+  $("spark-spd-max").textContent = pts.length ? `escala até ${Math.round(vmax)} km/h` : "sem pontos de GPS ainda";
+  $("spark-rpm-max").textContent = pts.length ? `escala até ${Math.round(rmax)} rpm` : "";
+}
+
+// ---------------------------------------------------------------- estado
+function chip(id, cls, text) {
+  const c = $(id); c.querySelector(".dot").className = "dot " + cls; c.lastElementChild.textContent = text;
+}
+function render(d) {
+  const tel = d.telemetry, gps = d.gps, can = (d.can_sources || [])[0];
+  if (can) {
+    const ok = can.status === "recebendo";
+    chip("chip-can", ok ? "ok" : (can.status === "erro" ? "bad" : "warn"),
+         `${can.name} ${ok ? fmt(can.fps) + " fps" : can.status}${can.iface === "virtual" ? " (virtual!)" : ""}`);
+  } else chip("chip-can", "", "CAN desligado");
+  if (gps) {
+    const f = gps.fix || {};
+    const cls = gps.status === "recebendo" ? "ok" : (gps.status === "erro" ? "bad" : "warn");
+    chip("chip-gps", cls, `GPS ${gps.status === "recebendo" ? (f.sats ?? "?") + " sat" : gps.status}`);
+    $("sats").textContent = f.sats != null ? `${f.sats} / ${gps.satellites.length} vistos` : "–";
+    $("hdop").textContent = f.hdop != null ? `${fmt(f.hdop, 2)} / ${f.fix_type === 3 ? "3D" : f.fix_type === 2 ? "2D" : "sem"}` : "–";
+    $("course").textContent = f.course_deg != null ? fmt(f.course_deg, 0, "°") : "–";
+    $("pos").textContent = f.lat != null ? `${f.lat.toFixed(5)}, ${f.lon.toFixed(5)}` : "–";
+    $("utc").textContent = f.utc ? f.utc.replace("T", " ").replace(/\.\d+Z$/, "Z") : "–";
+    $("alt").textContent = f.alt_m != null ? fmt(f.alt_m, 0, " m") : "–";
+    $("spd-gps").textContent = fmt(f.speed_kmh, 1);
+    if (f.lat != null && f.valid !== false) {
+      const ll = [f.lat, f.lon];
+      if (!car) car = L.marker(ll, {icon: carIcon(f.course_deg), zIndexOffset: 1000}).addTo(map);
+      else car.setLatLng(ll);
+      if (f.course_deg != null && f.course_deg !== carDeg) { car.setIcon(carIcon(f.course_deg)); carDeg = f.course_deg; }
+      if (firstFix) { map.setView(ll, 16); firstFix = false; }
+      else if (follow) map.panTo(ll, {animate: false});
+    }
+  } else chip("chip-gps", "", "GPS desligado");
+  if (!tel) return;
+  const s = tel.signals, dv = tel.derived, tr = tel.trip;
+  $("vin").textContent = tel.vin ? "VIN " + tel.vin : "";
+  $("spd").textContent = fmt(s["CAR_SPEED.CAR_SPEED"], 0);
+  $("spd-err").textContent = dv.speedo_err_pct != null ? (dv.speedo_err_pct > 0 ? "+" : "") + fmt(dv.speedo_err_pct, 1, "%") : "–";
+  $("gear").textContent = dv.gear ? dv.gear + "ª" : (s["CAR_SPEED.CAR_SPEED"] > 1 ? "~" : "–");
+  $("ratio").textContent = fmt(dv.rpm_per_kmh, 0);
+  $("trans").textContent = s["TRANS_465.TRANS_STATE"] ?? "–";
+  const rpm = s["POWERTRAIN_RPM.ENGINE_RPM"];
+  $("rpm").textContent = fmt(rpm);
+  const rb = $("rpm-bar"); rb.style.width = Math.min(100, (rpm || 0) / RPM_MAX * 100) + "%"; rb.classList.toggle("red", rpm > 6500);
+  const ped = s["POWERTRAIN_DATA.PEDAL_GAS"];
+  $("ped").textContent = ped != null ? `${ped} (bruto)` : "–";
+  $("ped-bar").style.width = Math.min(100, (ped || 0) / 255 * 100) + "%";
+  $("torque").textContent = fmt(s["GAS_PEDAL_2.ENGINE_TORQUE_ESTIMATE"], 0, " Nm");
+  lamp("l-brake", s["POWERTRAIN_DATA.BRAKE_PRESSED"]);
+  const gl = dv.long_g, gt = dv.lat_g, K = 55 / 0.6;
+  $("glong").textContent = gl != null ? fmt(gl, 2, " g") : "–";
+  $("glat").textContent = gt != null ? fmt(gt, 2, " g") : "–";
+  $("grade").textContent = dv.grade_pct != null ? fmt(dv.grade_pct, 1, "%") : "–";
+  const clamp = v => Math.max(-55, Math.min(55, v));
+  $("gdot").setAttribute("cx", clamp((gt || 0) * K)); $("gdot").setAttribute("cy", clamp(-(gl || 0) * K));
+  $("t-el").textContent = hms(tr.elapsed_s);
+  $("t-mov").textContent = hms(tr.moving_s);
+  $("d-can").textContent = fmt(tr.can_dist_km, 2, " km");
+  $("d-gps").textContent = fmt(tr.gps_dist_km, 2, " km");
+  $("d-cnt").textContent = tr.dist_counter != null ? `${tr.dist_counter} (+${tr.dist_counter_delta ?? 0})` : "–";
+  $("v-avg").textContent = fmt(tr.avg_kmh, 1, " km/h");
+  $("v-max").textContent = fmt(tr.max_kmh, 1, " km/h");
+  $("r-max").textContent = fmt(tr.max_rpm);
+  $("fuel").textContent = tr.fuel_raw != null ? `${tr.fuel_raw} (+${tr.fuel_delta ?? 0})` : "–";
+  $("coolant").textContent = fmt(s["ENGINE_STATUS.COOLANT_TEMP"], 0, " °C");
+  $("intake").textContent = fmt(s["ENGINE_STATUS.INTAKE_TEMP"], 0, " °C");
+  $("tguess").textContent = fmt(s["STATUS_374.TEMP_GUESS"], 0, " °C");
+  lamp("l-left", s["SCM_FEEDBACK.LEFT_BLINKER"]); lamp("l-right", s["SCM_FEEDBACK.RIGHT_BLINKER"]);
+  const ls = s["SCM_BUTTONS.LIGHTS_SETTING"];
+  $("l-lights").textContent = LIGHTS[ls] ?? "farol –"; lamp("l-lights", ls > 0);
+  lamp("l-belt", s["SEATBELT_STATUS.SEATBELT_DRIVER_LATCHED"]);
+  for (const [id, k] of [["l-fl", "FL"], ["l-fr", "FR"], ["l-rl", "RL"], ["l-rr", "RR"]]) lamp(id, s["DOORS_STATUS.DOOR_OPEN_" + k]);
+  lamp("l-trunk", s["DOORS_STATUS.TRUNK_OPEN"]);
+}
+
+async function poll() {
+  try {
+    const r = await fetch("/api/telemetry", {cache: "no-store"});
+    if (r.ok) render(await r.json());
+  } catch (e) { chip("chip-can", "bad", "servidor fora"); }
+  setTimeout(poll, 250);
+}
+async function pollTrack() {
+  try {
+    const r = await fetch("/api/track?since=" + lastSeq, {cache: "no-store"});
+    if (r.ok) {
+      const d = await r.json();
+      if (d.seq < lastSeq) {                // servidor reiniciou: recomeça o trajeto do zero
+        trackLayer.clearLayers(); allPts = []; curLine = null; curBin = -1; lastSeq = 0;
+      } else {
+        if (d.points.length) addPoints(d.points);
+        lastSeq = d.seq;
+      }
+    }
+  } catch (e) { /* o poll principal já mostra o erro */ }
+  setTimeout(pollTrack, 1000);
+}
+setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString("pt-BR"); }, 1000);
+poll(); pollTrack();
+</script>
+</body>
+</html>

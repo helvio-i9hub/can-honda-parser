@@ -80,6 +80,23 @@ virtual**: recusa interfaces físicas (`can0` com adaptador), para nunca
 injetar frames no barramento do carro. O dashboard mostra se cada fonte
 é `vcan, virtual` ou `adaptador`.
 
+### Telemetria com GPS (mapa)
+
+Painel `/telemetry`: mapa com o trajeto colorido pela velocidade, carro no rumo do GPS, e
+instrumentos — velocidade CAN × GPS (erro do velocímetro), marcha estimada, RPM, acelerador,
+freio, forças G (longitudinal pelo CAN, lateral pelo rumo do GPS), rampa, altitude,
+distâncias (CAN, GPS e contador 0x377), temperaturas, piscas/farol/portas/cinto e o VIN.
+
+```bash
+python3 -m can_honda web --live can0 --gps /dev/ttyACM0          # http://127.0.0.1:8090/telemetry
+python3 -m can_honda web --replay can.log --gps-replay gps.log   # sem o carro
+```
+
+O NMEA do `--gps` é gravado em `~/claude/gps-nmea-AAAAMMDD-HHMMSS.log` (`(ts) $GP...`, mesmo
+estilo do `candump -L`; serve de entrada para `--gps-replay`). `--no-gps-record` desliga.
+Leaflet 1.9.4 vem em `can_honda/static/vendor/leaflet` (BSD-2); só os tiles do
+OpenStreetMap precisam de internet — sem ela o trajeto aparece sobre fundo liso.
+
 ### Gravar uma captura
 
 ```bash

@@ -19,6 +19,11 @@ não adicionar dependências (python-can, cantools).
   `--replay log` (reemite em tempo real); Analysis é incremental (`feed`/`trim`) e serve aos dois
 - `socketcan.py` — `live_frames` (leitura) e `play` (injeção) só com `socket`; `play` RECUSA interface
   física (`interface_kind`: sem link `device` no sysfs = virtual). `web --vcan` = `--live vcan0`
+- `can_honda/gps.py` — GpsSource (thread serial `/dev/ttyACM0` raw + reconexão, replay, gravação
+  `(ts) $GP...`); `nmea.py` é CÓPIA do gps-uploader (corrigir lá primeiro)
+- `can_honda/telemetry.py` — estado CAN (listener do LiveSource) + GPS → derivadas (marcha por RPM/km/h,
+  G long./lat., erro do velocímetro, distâncias, rampa, VIN de 0x40C); painel `static/telemetry.html`
+  em `/telemetry` (Leaflet vendorizado em `static/vendor/leaflet`, tiles OSM)
 - `tools/capture-can.sh` — gravador candump -L que espera a interface e segmenta se ela cair
 
 ## Dados reais
@@ -34,11 +39,15 @@ não adicionar dependências (python-can, cantools).
 - Para parar o servidor use o PID (`ss -ltnp 'sport = :8090'`); `pkill -f "can_honda web"` mata o próprio shell.
 - Saltos de contador só nos ciclos de ignição (sample-0 L~505600/~512700, sample-1 L~149600) =
   módulos reiniciando, não perda de captura. (Cuidado: no `stats` a coluna Hz vazia desloca campos no awk.)
+- 19/10/2026: primeiras capturas ANDANDO (`~/claude/can-drive-20261019-161919.log` + `gps-nmea-*.log`).
+  Velocidades confirmadas; GPS ~4-6% abaixo do velocímetro. RPM/km/h: 1ª ~124, 2ª ~74, 3ª ~49.
+  0x1B0 (STANDSTILL) fica todo zerado andando — layout opendbc não vale. GPS: u-blox 7, 1 Hz.
 
 ## Regras
 - Todo sinal novo no DBC leva tag de confiança no `CM_ SG_`: `[CONFIRMADO]` só com evidência nos logs
   (dizer qual), `[OPENDBC]` quando vem do layout opendbc, `[HIPOTESE]` caso contrário.
   O teste `test_default_dbc_loads_comments_and_choices` exige a tag.
 - Fixtures de teste = trechos reais (`sed -n 'A,Bp'`), nunca dados sintéticos para sinais.
-- IDs sem definição ainda: 039 18E 1ED 21E 221 295 320 328 372 374 377 378 386 3D7 40C 428 42D 42E 454 465 6C1.
+- IDs sem definição ainda: 039 18E 1ED 21E 221 295 320 328 372 378 386 3D7 428 42D 42E 454 6C1.
+  0x40C = VIN em ASCII (byte 0 = página 1..3), decodificado em telemetry.py (DBC não tem string).
   Use `bytes --id` e `decode --unknown --id` para investigar.

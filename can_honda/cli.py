@@ -6,7 +6,8 @@ Comandos:
   csv      snapshot do estado do barramento em CSV (um registro a cada N frames de um ID)
   bytes    análise por byte de um ID (valores distintos, nº de mudanças) — para descobrir sinais
   summary  ciclos de motor (RPM > 0): duração, RPM, temperaturas, combustível
-  web      dashboard no navegador (sinais, gráficos, integridade, ciclos de motor)
+  web      dashboard no navegador (sinais, gráficos, integridade, ciclos de motor);
+           com --live can0 --gps /dev/ttyACM0, painel de telemetria com mapa em /telemetry
   signals  lista os sinais do DBC com unidade e confiança
   live     igual ao decode, mas lendo de uma interface SocketCAN (can0, vcan0…)
   play     injeta um log numa interface virtual (vcan0) — entrada para live/web sem o carro
@@ -210,11 +211,13 @@ def cmd_summary(args):
 def cmd_web(args):
     from .web import serve
     sources = args.sources
-    if not sources and not (args.live or args.replay or args.vcan):
+    if not sources and not (args.live or args.replay or args.vcan or args.gps or args.gps_replay):
         sources = [os.path.expanduser("~/claude/can*.log")]
     serve(sources, args.dbc, args.host, args.port,
           live_ifaces=(args.live or []) + (["vcan0"] if args.vcan else []), replays=args.replay or (),
-          retention=args.retention, replay_rate=args.replay_rate)
+          retention=args.retention, replay_rate=args.replay_rate,
+          gps_device=args.gps, gps_replay=args.gps_replay,
+          gps_record_dir=None if args.no_gps_record else args.gps_record)
     return 0
 
 
@@ -289,6 +292,11 @@ def build_parser():
     sp.add_argument("--replay-rate", type=float, default=1000.0, help="frames/s do replay (padrão 1000)")
     sp.add_argument("--retention", type=float, default=600.0,
                     help="segundos guardados nas séries ao vivo (padrão 600)")
+    sp.add_argument("--gps", metavar="DEV", help="GPS NMEA serial, ex.: --gps /dev/ttyACM0 (painel /telemetry)")
+    sp.add_argument("--gps-replay", metavar="LOG", help="reemite um log NMEA gravado como GPS ao vivo")
+    sp.add_argument("--gps-record", metavar="DIR", default="~/claude",
+                    help="pasta onde gravar o NMEA do --gps (padrão ~/claude, gps-nmea-*.log)")
+    sp.add_argument("--no-gps-record", action="store_true", help="não grava o NMEA do --gps")
     sp.set_defaults(fn=cmd_web)
     return p
 

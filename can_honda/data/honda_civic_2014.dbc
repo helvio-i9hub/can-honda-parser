@@ -113,12 +113,29 @@ BO_ 1029 DOORS_STATUS: 8 BODY
  SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EPS
  SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EPS
 
+BO_ 884 STATUS_374: 7 XXX
+ SG_ TEMP_GUESS : 7|8@0+ (1,-40) [-40|215] "C" EPS
+ SG_ COUNTER : 53|2@0+ (1,0) [0|3] "" EPS
+ SG_ CHECKSUM : 51|4@0+ (1,0) [0|15] "" EPS
+
+BO_ 887 DISTANCE_377: 8 XXX
+ SG_ DRIVE_STATE : 7|8@0+ (1,0) [0|255] "" EPS
+ SG_ DIST_COUNTER_A : 15|15@0+ (1,0) [0|32767] "" EPS
+ SG_ DIST_COUNTER : 31|16@0+ (1,0) [0|65535] "" EPS
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EPS
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EPS
+
+BO_ 1125 TRANS_465: 8 XXX
+ SG_ TRANS_STATE : 55|8@0+ (1,0) [0|255] "" EPS
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EPS
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EPS
+
 CM_ BO_ 597 "Sem checksum Honda no ultimo byte (so 6/28595 frames batem por acaso).";
 CM_ BO_ 464 "COUNTER fica sempre 0 nos logs; bits 7:4 do ultimo byte sao o fim de WHEEL_SPEED_RR.";
 CM_ SG_ 316 ENGINE_TORQUE_ESTIMATE "[HIPOTESE] layout do GAS_PEDAL_2 do opendbc (la em 0x130); -105 com motor desligado.";
 CM_ SG_ 316 ENGINE_TORQUE_REQUEST "[HIPOTESE] idem; ~170-440 com motor em marcha lenta.";
 CM_ SG_ 316 CAR_GAS "[CONFIRMADO] acompanha POWERTRAIN_DATA.PEDAL_GAS (0..0x79 nos logs).";
-CM_ SG_ 344 XMISSION_SPEED "[OPENDBC] carro parado nos logs (sempre 0).";
+CM_ SG_ 344 XMISSION_SPEED "[CONFIRMADO] andando em 19/10/2026: acompanha CAR_SPEED e as 4 rodas (ate 48 km/h; GPS ~4% abaixo).";
 CM_ SG_ 344 XMISSION_SPEED2 "[OPENDBC] carro parado nos logs (sempre 0).";
 CM_ SG_ 380 PEDAL_GAS "[CONFIRMADO] varia 0..0x7F com acelerador; ecoa em 0x13C byte 4.";
 CM_ SG_ 380 ENGINE_RPM "[CONFIRMADO] identico a 0x1DC; marcha lenta fria ~1300 -> quente ~770.";
@@ -132,18 +149,18 @@ CM_ SG_ 422 CRUISE_BUTTONS "[OPENDBC] 0x25/0x24 aparecem em can-sample-1 (=1, MA
 CM_ SG_ 422 CRUISE_SETTING "[OPENDBC]";
 CM_ SG_ 422 LIGHTS_SETTING "[OPENDBC] bits 1:0 de byte0 alternam 0/1/2/3 nos logs (alavanca de farol).";
 CM_ SG_ 422 MAIN_ON "[OPENDBC]";
-CM_ SG_ 432 WHEELS_MOVING "[OPENDBC] sempre 0 (parado).";
+CM_ SG_ 432 WHEELS_MOVING "[OPENDBC] NAO funciona neste carro: 0x1B0 fica todo zerado andando a 35 km/h (19/10/2026).";
 CM_ SG_ 432 BRAKE_ERROR_1 "[OPENDBC]";
 CM_ SG_ 432 BRAKE_ERROR_2 "[OPENDBC]";
-CM_ SG_ 464 WHEEL_SPEED_FL "[OPENDBC] sempre 0 (parado).";
-CM_ SG_ 464 WHEEL_SPEED_FR "[OPENDBC] sempre 0 (parado).";
-CM_ SG_ 464 WHEEL_SPEED_RL "[OPENDBC] sempre 0 (parado).";
-CM_ SG_ 464 WHEEL_SPEED_RR "[OPENDBC] sempre 0 (parado).";
+CM_ SG_ 464 WHEEL_SPEED_FL "[CONFIRMADO] andando em 19/10/2026: acompanha CAR_SPEED.";
+CM_ SG_ 464 WHEEL_SPEED_FR "[CONFIRMADO] andando em 19/10/2026: acompanha CAR_SPEED.";
+CM_ SG_ 464 WHEEL_SPEED_RL "[CONFIRMADO] andando em 19/10/2026: acompanha CAR_SPEED.";
+CM_ SG_ 464 WHEEL_SPEED_RR "[CONFIRMADO] andando em 19/10/2026: acompanha CAR_SPEED.";
 CM_ SG_ 476 ENGINE_RPM "[CONFIRMADO] identico a POWERTRAIN_DATA.ENGINE_RPM.";
-CM_ SG_ 597 WHEEL_SPEED_FL "[OPENDBC] 00/FA nos logs (parado).";
-CM_ SG_ 597 WHEEL_SPEED_FR "[OPENDBC] 00/FA nos logs (parado).";
-CM_ SG_ 597 WHEEL_SPEED_RL "[OPENDBC] 00/FA nos logs (parado).";
-CM_ SG_ 597 WHEEL_SPEED_RR "[OPENDBC] 00/FA nos logs (parado).";
+CM_ SG_ 597 WHEEL_SPEED_FL "[CONFIRMADO] km/h inteiros, acompanha CAR_SPEED andando (19/10/2026); 00/FA parado.";
+CM_ SG_ 597 WHEEL_SPEED_FR "[CONFIRMADO] km/h inteiros, acompanha CAR_SPEED andando (19/10/2026); 00/FA parado.";
+CM_ SG_ 597 WHEEL_SPEED_RL "[CONFIRMADO] km/h inteiros, acompanha CAR_SPEED andando (19/10/2026); 00/FA parado.";
+CM_ SG_ 597 WHEEL_SPEED_RR "[CONFIRMADO] km/h inteiros, acompanha CAR_SPEED andando (19/10/2026); 00/FA parado.";
 CM_ SG_ 597 SET_TO_X55 "[CONFIRMADO] sempre 0x55.";
 CM_ SG_ 597 SET_TO_X55_2 "[CONFIRMADO] sempre 0x55.";
 CM_ SG_ 597 LONG_COUNTER "[CONFIRMADO] percorre 00..FF.";
@@ -151,7 +168,7 @@ CM_ SG_ 660 LEFT_BLINKER "[CONFIRMADO] byte0 0x20 alterna (pisca); lado segundo 
 CM_ SG_ 660 RIGHT_BLINKER "[CONFIRMADO] byte0 0x40 alterna (pisca); lado segundo o opendbc.";
 CM_ SG_ 773 SEATBELT_DRIVER_LAMP "[OPENDBC] constante 0x80 0x14 nos logs.";
 CM_ SG_ 773 SEATBELT_DRIVER_LATCHED "[OPENDBC] constante nos logs.";
-CM_ SG_ 777 CAR_SPEED "[OPENDBC] sempre 0 (parado).";
+CM_ SG_ 777 CAR_SPEED "[CONFIRMADO] andando em 19/10/2026: velocimetro, ~4% acima da velocidade do GPS (46,0 x 44,2 km/h).";
 CM_ SG_ 804 COOLANT_TEMP "[CONFIRMADO] sobe 23->65 C em marcha lenta e cai lentamente apos desligar.";
 CM_ SG_ 804 INTAKE_TEMP "[CONFIRMADO] ~26 C rodando; sobe 33->41 C apos desligar (heat soak).";
 CM_ SG_ 804 TRIP_FUEL_CONSUMED "[CONFIRMADO] cresce monotono com motor ligado e zera ao desligar; unidade desconhecida.";
@@ -162,5 +179,10 @@ CM_ SG_ 1029 DOOR_OPEN_RL "[OPENDBC] alterna em can-sample-1.";
 CM_ SG_ 1029 DOOR_OPEN_RR "[OPENDBC] alterna em can-sample-1.";
 CM_ SG_ 1029 TRUNK_OPEN "[OPENDBC]";
 
+CM_ SG_ 884 TEMP_GUESS "[HIPOTESE] temperatura lenta (externa?): 26-28 C em 12/10, 35 C em 19/10 parado; igual a 0x21E byte 3.";
+CM_ SG_ 887 DRIVE_STATE "[HIPOTESE] 0x06 parado; sobe na desaceleracao/frenagem (ate 0x56).";
+CM_ SG_ 887 DIST_COUNTER "[HIPOTESE] contador de distancia, +1 a cada ~110 m (GPS/CAN_SPEED); de 12/10 a 19/10 avancou 707, igual a DIST_COUNTER_A. Unidade provavel 0,1 km — conferir com odometro/trip do painel.";
+CM_ SG_ 887 DIST_COUNTER_A "[HIPOTESE] bits 15:1 dos bytes 1-2; sempre igual a DIST_COUNTER.";
+CM_ SG_ 1125 TRANS_STATE "[HIPOTESE] estado do cambio: 1 parado/1a marcha, 3 marchas de cima, 2 junto das trocas (coincide com 0x320 bit 0x80).";
 VAL_ 422 CRUISE_BUTTONS 7 "TBD" 6 "TBD" 5 "TBD" 4 "ACCEL_RES" 3 "DECEL_SET" 2 "CANCEL" 1 "MAIN" 0 "NONE" ;
 VAL_ 422 LIGHTS_SETTING 3 "HIGH_BEAM" 2 "LOW_BEAM" 1 "POSITION" 0 "NONE" ;

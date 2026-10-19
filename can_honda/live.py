@@ -42,6 +42,7 @@ def replay_frames(path, rate=1000.0, loop=True):
 class LiveSource:
     def __init__(self, name, frames_factory, db, retention=600.0, kind="socketcan"):
         self.name = name
+        self.listeners = []            # chamados com cada frame, fora do lock (ex.: telemetria)
         self.kind = kind
         self.lock = threading.Lock()
         self.analysis = Analysis(db=db, name=name, retention=retention)
@@ -80,6 +81,8 @@ class LiveSource:
                         if now - last_trim >= TRIM_EVERY_S:
                             self.analysis.trim()
                             last_trim = now
+                    for fn in self.listeners:
+                        fn(f)
                     self.status, self.error, self.last_frame = "recebendo", None, now
                     rate_n += 1
                     if now - last_rate >= 1.0:
