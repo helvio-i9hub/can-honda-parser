@@ -138,7 +138,7 @@ CM_ SG_ 316 CAR_GAS "[CONFIRMADO] acompanha POWERTRAIN_DATA.PEDAL_GAS (0..0x79 n
 CM_ SG_ 344 XMISSION_SPEED "[CONFIRMADO] andando em 19/10/2026: acompanha CAR_SPEED e as 4 rodas (ate 48 km/h; GPS ~4% abaixo).";
 CM_ SG_ 344 XMISSION_SPEED2 "[OPENDBC] carro parado nos logs (sempre 0).";
 CM_ SG_ 380 PEDAL_GAS "[CONFIRMADO] varia 0..0x7F com acelerador; ecoa em 0x13C byte 4.";
-CM_ SG_ 380 ENGINE_RPM "[CONFIRMADO] identico a 0x1DC; marcha lenta fria ~1300 -> quente ~770.";
+CM_ SG_ 380 ENGINE_RPM "[CONFIRMADO] identico a 0x1DC; marcha lenta fria ~1300 -> quente ~770. RPM por km/h (CAR_SPEED) com acelerador: 1a ~124, 2a ~72-74, 3a ~47-49, 4a ~36 (21/10/2026, 316 s a 36,2); 5a ainda nao vista (max 52 km/h).";
 CM_ SG_ 380 GAS_PRESSED "[OPENDBC] alterna junto com pisadas no acelerador.";
 CM_ SG_ 380 BRAKE_SWITCH "[OPENDBC] alterna nos logs (byte4 bit0).";
 CM_ SG_ 380 BRAKE_PRESSED "[CONFIRMADO] byte6 0x20 alterna em pisadas de freio.";
@@ -171,7 +171,7 @@ CM_ SG_ 773 SEATBELT_DRIVER_LATCHED "[OPENDBC] constante nos logs.";
 CM_ SG_ 777 CAR_SPEED "[CONFIRMADO] andando em 19/10/2026: velocimetro, ~4% acima da velocidade do GPS (46,0 x 44,2 km/h).";
 CM_ SG_ 804 COOLANT_TEMP "[CONFIRMADO] sobe 23->65 C em marcha lenta e cai lentamente apos desligar.";
 CM_ SG_ 804 INTAKE_TEMP "[CONFIRMADO] ~26 C rodando; sobe 33->41 C apos desligar (heat soak).";
-CM_ SG_ 804 TRIP_FUEL_CONSUMED "[CONFIRMADO] cresce monotono com motor ligado e zera ao desligar; unidade desconhecida.";
+CM_ SG_ 804 TRIP_FUEL_CONSUMED "[CONFIRMADO] cresce monotono com motor ligado e zera ao desligar. Unidade [HIPOTESE] 0,1 mL: 21/10/2026 +8622 em 7,2 km de GPS (18 min urbano, 6 min parado) = 0,86 L, 8,4 km/L; confirmar com abastecimento.";
 CM_ SG_ 804 ENGINE_OFF_FLAGS "[HIPOTESE] 0x0E (14) com motor desligado, 0 ligado.";
 CM_ SG_ 1029 DOOR_OPEN_FL "[OPENDBC] fixo em 1 nos logs (porta do motorista aberta durante a captura?).";
 CM_ SG_ 1029 DOOR_OPEN_FR "[OPENDBC] alterna em can-sample-1.";

@@ -8,8 +8,8 @@ com velocidade/RPM/marcha do CAN no instante).
 
 Derivadas e de onde vêm:
   - marcha estimada: RPM ÷ km/h agrupado nas relações medidas andando em
-    12/10 e 19/10 (1ª ~124, 2ª ~74, 3ª ~49); 4ª/5ª extrapoladas das relações
-    do câmbio de 5 marchas — [HIPOTESE] até aparecerem nos logs
+    12/10, 19/10 e 21/10 (1ª ~124, 2ª ~74, 3ª ~49, 4ª ~36); 5ª extrapolada das
+    relações do câmbio de 5 marchas — [HIPOTESE] até aparecer nos logs
   - aceleração longitudinal: derivada de XMISSION_SPEED (100 Hz) em janela de 1 s
   - aceleração lateral: velocidade × taxa de giro do rumo do GPS
   - erro do velocímetro: CAR_SPEED contra a velocidade do GPS (média móvel)
@@ -26,7 +26,7 @@ from collections import deque
 from .decoder import BusState, Decoder
 
 # RPM por km/h em cada marcha (marcha travada, conversor acoplado).
-GEAR_RATIO = {1: 124.0, 2: 74.0, 3: 49.0, 4: 35.0, 5: 25.0}
+GEAR_RATIO = {1: 124.0, 2: 74.0, 3: 49.0, 4: 36.0, 5: 25.0}
 GEAR_TOL = 0.10
 GEAR_MIN_KMH = 6.0
 EARTH_R = 6371008.8

@@ -40,7 +40,8 @@ não adicionar dependências (python-can, cantools).
 - Saltos de contador só nos ciclos de ignição (sample-0 L~505600/~512700, sample-1 L~149600) =
   módulos reiniciando, não perda de captura. (Cuidado: no `stats` a coluna Hz vazia desloca campos no awk.)
 - 19/10/2026: primeiras capturas ANDANDO (`~/claude/can-drive-20261019-161919.log` + `gps-nmea-*.log`).
-  Velocidades confirmadas; GPS ~4-6% abaixo do velocímetro. RPM/km/h: 1ª ~124, 2ª ~74, 3ª ~49.
+  Velocidades confirmadas; GPS ~4-6% abaixo do velocímetro. RPM/km/h: 1ª ~124, 2ª ~74, 3ª ~49; 4ª ~36 (21/10, viagem da caixa em
+  ~/claude/can-drive-20261021/). TRIP_FUEL_CONSUMED: unidade provável 0,1 mL (hipótese, 8,4 km/L).
   0x1B0 (STANDSTILL) fica todo zerado andando — layout opendbc não vale. GPS: u-blox 7, 1 Hz.
 
 ## Regras
